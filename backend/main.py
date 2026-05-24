@@ -9,7 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, File, Header, HTTPException, UploadFile
+from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -248,23 +248,26 @@ def cookies_status(x_auth_token: Optional[str] = Header(None)):
     return out
 
 
+class CookiesUpload(BaseModel):
+    content: str
+
+
 @app.post("/api/cookies/{platform}")
-async def upload_cookies(platform: str, file: UploadFile = File(...),
-                         x_auth_token: Optional[str] = Header(None)):
+def upload_cookies(platform: str, body: CookiesUpload,
+                   x_auth_token: Optional[str] = Header(None)):
     check_auth(x_auth_token)
     if platform not in ALLOWED_COOKIE_PLATFORMS:
         raise HTTPException(400, f"platform must be one of {sorted(ALLOWED_COOKIE_PLATFORMS)}")
-    content = await file.read()
-    if len(content) == 0:
-        raise HTTPException(400, "empty file")
+    content = body.content.strip()
+    if not content:
+        raise HTTPException(400, "empty content")
     if len(content) > 1024 * 1024:
-        raise HTTPException(413, "cookies file > 1MB, too large")
-    # 简易校验：Netscape 格式应该有 \t 分隔
-    text_head = content[:2048].decode("utf-8", errors="ignore")
-    if "\t" not in text_head and "# Netscape" not in text_head:
+        raise HTTPException(413, "cookies > 1MB, too large")
+    head = content[:2048]
+    if "\t" not in head and "# Netscape" not in head:
         raise HTTPException(400, "看起来不是 Netscape cookies.txt 格式（缺 tab 分隔符），请用「Get cookies.txt LOCALLY」类扩展导出")
     path = COOKIES_DIR / f"{platform}.txt"
-    path.write_bytes(content)
+    path.write_text(content, encoding="utf-8")
     path.chmod(0o600)
     return {"ok": True, "platform": platform, "size": len(content)}
 

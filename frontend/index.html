@@ -418,20 +418,17 @@
     border: 1px solid var(--border);
   }
   .cookie-row-status.has { color: var(--success); border-color: rgba(16,185,129,0.3); }
-  .cookie-row-controls {
-    display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
-  }
-  .cookie-row input[type=file] {
-    flex: 1; min-width: 0; background: var(--bg);
+  .cookie-row textarea {
+    width: 100%; background: var(--bg);
     border: 1px solid var(--border); border-radius: var(--radius-sm);
-    padding: 6px 8px; color: var(--text); font-size: 12px;
-    font-family: var(--font-mono);
+    padding: 8px 10px; color: var(--text); font-size: 11.5px;
+    font-family: var(--font-mono); resize: vertical;
+    min-height: 80px; max-height: 200px; line-height: 1.4;
   }
-  .cookie-row input[type=file]::file-selector-button {
-    background: var(--bg-card); color: var(--text);
-    border: 1px solid var(--border); border-radius: var(--radius-sm);
-    padding: 4px 10px; margin-right: 8px; cursor: pointer;
-    font-family: var(--font-sans); font-size: 12px;
+  .cookie-row textarea:focus { outline: none; border-color: var(--accent); }
+  .cookie-row-actions {
+    display: flex; gap: 8px; align-items: center;
+    margin-top: 8px; justify-content: flex-end;
   }
 
   /* ── Toast ─────────────────────────── */
@@ -894,13 +891,11 @@ async function refreshCookiesStatus() {
           <div class="cookie-row-title">${meta.name}</div>
           ${statusHtml}
         </div>
-        <div class="cookie-row-controls">
-          <input type="file" id="cookies-file-${p}" accept=".txt" />
-          <button class="btn btn-small" onclick="uploadCookies('${p}')">上传</button>
-          ${info.exists ? `<button class="btn btn-secondary btn-small" onclick="deleteCookies('${p}')">删除</button>` : ''}
-        </div>
-        <div style="font-size: 11px; color: var(--text-faint); margin-top: 8px; font-family: var(--font-mono);">
-          访问 <a href="${meta.site}" target="_blank">${meta.site}</a> → Get cookies.txt LOCALLY → Export
+        <textarea id="cookies-text-${p}" placeholder="粘贴 cookies.txt 内容&#10;（Netscape 格式，每行 tab 分隔。可用 Get cookies.txt LOCALLY 扩展导出后复制全文）"></textarea>
+        <div class="cookie-row-actions">
+          <a href="${meta.site}" target="_blank" style="font-size: 11px; color: var(--text-faint); margin-right: auto; font-family: var(--font-mono);">${meta.site}</a>
+          ${info.exists ? `<button class="btn btn-secondary btn-small" onclick="deleteCookies('${p}')">删除已存</button>` : ''}
+          <button class="btn btn-small" onclick="uploadCookies('${p}')">保存</button>
         </div>
       `;
     }
@@ -910,24 +905,16 @@ async function refreshCookiesStatus() {
 }
 
 async function uploadCookies(platform) {
-  const fileEl = document.getElementById(`cookies-file-${platform}`);
-  if (!fileEl.files.length) { toast('先选文件'); return; }
-  const fd = new FormData();
-  fd.append('file', fileEl.files[0]);
+  const textEl = document.getElementById(`cookies-text-${platform}`);
+  const content = textEl.value.trim();
+  if (!content) { toast('粘贴 cookies 内容'); return; }
   try {
-    const r = await fetch(API + `/api/cookies/${platform}`, {
-      method: 'POST', body: fd,
-      headers: AUTH_TOKEN ? { 'X-Auth-Token': AUTH_TOKEN } : {},
-    });
-    if (!r.ok) {
-      const t = await r.text();
-      throw new Error(`${r.status}: ${t}`);
-    }
-    toast(`${platform} cookies 已上传`);
-    fileEl.value = '';
+    await api('POST', `/api/cookies/${platform}`, { content });
+    toast(`${platform} cookies 已保存`);
+    textEl.value = '';
     await refreshCookiesStatus();
   } catch (e) {
-    toast('上传失败: ' + e.message, 4000);
+    toast('保存失败: ' + e.message, 4000);
   }
 }
 
