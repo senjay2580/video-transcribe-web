@@ -1,0 +1,21 @@
+[Unit]
+Description=Video Transcribe Web
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/video-transcribe-web/backend
+EnvironmentFile=/opt/video-transcribe-web/.env
+ExecStart=/opt/video-transcribe-web/.venv/bin/uvicorn main:app --host 0.0.0.0 --port 8088
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+# 内存上限（防止吃光 1GB VPS）
+MemoryMax=600M
+# CPU 限制（防止抢占 sing-box / cli-proxy-api）
+CPUQuota=80%
+
+[Install]
+WantedBy=multi-user.target
