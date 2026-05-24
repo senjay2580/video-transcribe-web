@@ -310,6 +310,8 @@
     transition: max-height 0.2s;
   }
   .bottom.empty { padding: 0; max-height: 0; border-top: none; }
+  .bottom.collapsed { max-height: 44px; padding-bottom: 4px; }
+  .bottom.collapsed .bottom-grid { display: none; }
   .bottom-header {
     display: flex; justify-content: space-between; align-items: center;
     margin-bottom: 8px;
@@ -317,7 +319,15 @@
   .bottom-title {
     font-size: 11px; color: var(--text-muted); font-weight: 600;
     text-transform: uppercase; letter-spacing: 0.06em;
+    display: flex; align-items: center; gap: 8px;
+    cursor: pointer; user-select: none;
   }
+  .bottom-title:hover { color: var(--text); }
+  .bottom-toggle {
+    display: inline-block; transition: transform 0.2s;
+    color: var(--text-faint); font-size: 10px;
+  }
+  .bottom.collapsed .bottom-toggle { transform: rotate(-90deg); }
   .bottom-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -576,7 +586,10 @@
   <!-- Bottom: Active Jobs Grid -->
   <div id="bottom" class="bottom empty">
     <div class="bottom-header">
-      <div class="bottom-title">活动任务</div>
+      <div class="bottom-title" onclick="toggleBottom()">
+        <span class="bottom-toggle">▾</span>
+        活动任务
+      </div>
       <div id="bottom-stats" class="status-pill"></div>
     </div>
     <div id="bottom-grid" class="bottom-grid"></div>
@@ -660,6 +673,12 @@ function toggleSidebar() {
   const bd = document.getElementById('backdrop');
   sb.classList.toggle('open');
   bd.classList.toggle('show', sb.classList.contains('open'));
+}
+
+function toggleBottom() {
+  const b = document.getElementById('bottom');
+  b.classList.toggle('collapsed');
+  localStorage.setItem('vt_bottom_collapsed', b.classList.contains('collapsed') ? '1' : '0');
 }
 function closeSidebar() {
   document.getElementById('sidebar').classList.remove('open');
@@ -1060,6 +1079,9 @@ async function tick() {
 // ─── Init ──────────────────────────────────────────────
 async function init() {
   loadConfig();
+  if (localStorage.getItem('vt_bottom_collapsed') === '1') {
+    document.getElementById('bottom').classList.add('collapsed');
+  }
   await refreshHealth();
   await refreshHistory();
   if (pollTimer) clearInterval(pollTimer);
