@@ -252,6 +252,32 @@ class CookiesUpload(BaseModel):
     content: str
 
 
+PLATFORM_DOMAIN = {
+    "bilibili": "bilibili.com",
+    "youtube": "youtube.com",
+}
+
+
+def _header_to_netscape(header: str, domain: str) -> str:
+    """把 'k1=v1; k2=v2;' 这种浏览器复制出来的字符串转成 Netscape cookies.txt 格式"""
+    lines = ["# Netscape HTTP Cookie File",
+             "# Converted from raw cookie header"]
+    # 未来 10 年的时间戳作为 expires
+    far_future = 2_000_000_000
+    for part in header.replace("\n", ";").split(";"):
+        part = part.strip()
+        if not part or "=" not in part:
+            continue
+        name, _, value = part.partition("=")
+        name = name.strip()
+        value = value.strip()
+        if not name:
+            continue
+        # 字段: domain  include_subdomains  path  secure  expires  name  value
+        lines.append(f".{domain}\tTRUE\t/\tFALSE\t{far_future}\t{name}\t{value}")
+    return "\n".join(lines) + "\n"
+
+
 @app.post("/api/cookies/{platform}")
 def upload_cookies(platform: str, body: CookiesUpload,
                    x_auth_token: Optional[str] = Header(None)):
@@ -264,12 +290,24 @@ def upload_cookies(platform: str, body: CookiesUpload,
     if len(content) > 1024 * 1024:
         raise HTTPException(413, "cookies > 1MB, too large")
     head = content[:2048]
-    if "\t" not in head and "# Netscape" not in head:
-        raise HTTPException(400, "看起来不是 Netscape cookies.txt 格式（缺 tab 分隔符），请用「Get cookies.txt LOCALLY」类扩展导出")
+
+    if "\t" in head or "# Netscape" in head:
+        # 已经是 Netscape 格式
+        normalized = content
+        fmt = "netscape"
+    elif ";" in head and "=" in head:
+        # 浏览器复制的 raw cookie header
+        normalized = _header_to_netscape(content, PLATFORM_DOMAIN[platform])
+        if normalized.count("\n") < 3:  # 至少有一条 cookie
+            raise HTTPException(400, "解析失败：没识别出任何 cookie 键值对")
+        fmt = "converted-from-header"
+    else:
+        raise HTTPException(400, "无法识别 cookies 格式。支持：① Netscape cookies.txt 格式 ② 浏览器 DevTools 复制的 'k1=v1; k2=v2;' 形式")
+
     path = COOKIES_DIR / f"{platform}.txt"
-    path.write_text(content, encoding="utf-8")
+    path.write_text(normalized, encoding="utf-8")
     path.chmod(0o600)
-    return {"ok": True, "platform": platform, "size": len(content)}
+    return {"ok": True, "platform": platform, "size": len(normalized), "format": fmt}
 
 
 @app.delete("/api/cookies/{platform}")
