@@ -962,13 +962,37 @@ async function deleteCookies(platform) {
 }
 
 async function copyText(btn, text) {
-  try {
-    await navigator.clipboard.writeText(text);
+  let ok = false;
+  // 1. 优先用 modern Clipboard API（仅 HTTPS / localhost 可用）
+  if (navigator.clipboard && window.isSecureContext) {
+    try {
+      await navigator.clipboard.writeText(text);
+      ok = true;
+    } catch (e) { /* fallback */ }
+  }
+  // 2. fallback: execCommand（HTTP 环境的兼容方案）
+  if (!ok) {
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.top = '-9999px';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      ta.setSelectionRange(0, text.length);
+      ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+    } catch (e) { /* give up */ }
+  }
+  if (ok) {
     const orig = btn.textContent;
     btn.textContent = '已复制 ✓';
-    setTimeout(() => btn.textContent = orig, 1500);
-  } catch (e) {
-    toast('复制失败: ' + e.message);
+    setTimeout(() => { btn.textContent = orig; }, 1500);
+  } else {
+    toast('复制失败，请手动选中复制');
   }
 }
 
