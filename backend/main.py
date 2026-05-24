@@ -1,6 +1,7 @@
-"""FastAPI 主入口：URL 提交 → 后台 6 路并发转录 → 前端轮询拿结果"""
+"""FastAPI 主入口：URL 提交 → 后台并发转录 → 前端轮询 + 历史持久化"""
 from __future__ import annotations
 
+import json
 import os
 import time
 import uuid
@@ -8,33 +9,71 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, Header, HTTPException, BackgroundTasks
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import FastAPI, Header, HTTPException
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from transcribe_lib import TranscribeError, transcribe_one
 
+# ─── Env 配置 ─────────────────────────────────────────────────────────
 GROQ_API_KEYS = [k.strip() for k in os.environ.get("GROQ_API_KEYS", "").split(",") if k.strip()]
 WEB_PASSWORD = os.environ.get("WEB_PASSWORD", "").strip()
 LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "https://api.deepseek.com/v1").strip()
 LLM_API_KEY = os.environ.get("LLM_API_KEY", "").strip()
 LLM_MODEL = os.environ.get("LLM_MODEL", "deepseek-chat").strip()
+JOBS_DIR = Path(os.environ.get("JOBS_DIR", "data/jobs")).resolve()
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 
-if not GROQ_API_KEYS:
-    print("[WARN] GROQ_API_KEYS 环境变量未设置，转录会失败")
+JOBS_DIR.mkdir(parents=True, exist_ok=True)
+
+if not GROQ_API_KEYS or all(k.startswith("PLACEHOLDER") for k in GROQ_API_KEYS):
+    print("[WARN] GROQ_API_KEYS 未设置或是占位符，转录会失败")
 
 app = FastAPI(title="Video Transcribe Web")
 
-# in-memory 任务表
+# in-memory 任务表（启动时从 JOBS_DIR 加载）
 JOBS: dict[str, dict] = {}
-EXECUTOR = ThreadPoolExecutor(max_workers=12)  # 池子开大点，前端限并发
+EXECUTOR = ThreadPoolExecutor(max_workers=12)
 
 
 def check_auth(token: Optional[str]):
     if WEB_PASSWORD and token != WEB_PASSWORD:
         raise HTTPException(status_code=401, detail="auth required")
+
+
+# ─── 持久化 ──────────────────────────────────────────────────────────
+
+def _save_job(job_id: str):
+    job = JOBS.get(job_id)
+    if not job:
+        return
+    try:
+        (JOBS_DIR / f"{job_id}.json").write_text(
+            json.dumps(job, ensure_ascii=False), encoding="utf-8"
+        )
+    except Exception as e:
+        print(f"[WARN] save job {job_id}: {e}")
+
+
+def _load_jobs():
+    for f in JOBS_DIR.glob("*.json"):
+        try:
+            data = json.loads(f.read_text(encoding="utf-8"))
+            # 启动时如果有未完成的任务，标记为 failed（进程崩溃过）
+            if data.get("status") == "running":
+                data["status"] = "done"
+                for it in data.get("items", []):
+                    if it.get("status") in ("running", "pending"):
+                        it["status"] = "failed"
+                        it["error"] = "服务重启中断"
+            JOBS[data["id"]] = data
+        except Exception as e:
+            print(f"[WARN] load {f}: {e}")
+    print(f"[INFO] loaded {len(JOBS)} jobs from {JOBS_DIR}")
+
+
+_load_jobs()
 
 
 # ─── Models ──────────────────────────────────────────────────────────
@@ -48,10 +87,13 @@ class TranscribeRequest(BaseModel):
 # ─── 后台任务 ──────────────────────────────────────────────────────────
 
 def _worker(job_id: str, item_idx: int, url: str, req: TranscribeRequest):
-    job = JOBS[job_id]
+    job = JOBS.get(job_id)
+    if not job:
+        return
     item = job["items"][item_idx]
     item["status"] = "running"
     item["started_at"] = time.time()
+    _save_job(job_id)
 
     def log(msg: str):
         line = f"[{time.strftime('%H:%M:%S')}] {msg}"
@@ -87,6 +129,22 @@ def _worker(job_id: str, item_idx: int, url: str, req: TranscribeRequest):
     if all(it["status"] in ("done", "failed") for it in job["items"]):
         job["status"] = "done"
         job["finished_at"] = time.time()
+    _save_job(job_id)
+
+
+def _job_summary(j: dict) -> dict:
+    """侧边栏用的轻量摘要 — 不含全文/日志"""
+    return {
+        "id": j["id"],
+        "status": j["status"],
+        "created_at": j["created_at"],
+        "finished_at": j.get("finished_at"),
+        "items": [
+            {"idx": i["idx"], "url": i["url"], "status": i["status"],
+             "title": i.get("title"), "elapsed": i.get("elapsed")}
+            for i in j["items"]
+        ],
+    }
 
 
 # ─── API ─────────────────────────────────────────────────────────────
@@ -97,8 +155,8 @@ def start_transcribe(req: TranscribeRequest, x_auth_token: Optional[str] = Heade
     urls = [u.strip() for u in req.urls if u.strip()]
     if not urls:
         raise HTTPException(400, "no urls")
-    if not GROQ_API_KEYS:
-        raise HTTPException(500, "服务端未配置 GROQ_API_KEYS")
+    if not GROQ_API_KEYS or all(k.startswith("PLACEHOLDER") for k in GROQ_API_KEYS):
+        raise HTTPException(500, "服务端 GROQ_API_KEYS 未配置或是占位符，去 SSH 改 /opt/video-transcribe-web/.env")
 
     job_id = uuid.uuid4().hex[:12]
     JOBS[job_id] = {
@@ -112,13 +170,24 @@ def start_transcribe(req: TranscribeRequest, x_auth_token: Optional[str] = Heade
             for i, u in enumerate(urls)
         ],
     }
+    _save_job(job_id)
     for i, u in enumerate(urls):
         EXECUTOR.submit(_worker, job_id, i, u, req)
     return {"job_id": job_id, "count": len(urls)}
 
 
+@app.get("/api/jobs")
+def list_jobs(x_auth_token: Optional[str] = Header(None)):
+    """列出所有任务（摘要，无全文）"""
+    check_auth(x_auth_token)
+    out = [_job_summary(j) for j in JOBS.values()]
+    out.sort(key=lambda x: x["created_at"], reverse=True)
+    return out
+
+
 @app.get("/api/jobs/{job_id}")
 def get_job(job_id: str, x_auth_token: Optional[str] = Header(None)):
+    """获取单个任务完整数据（含全文 + 日志）"""
     check_auth(x_auth_token)
     job = JOBS.get(job_id)
     if not job:
@@ -130,7 +199,19 @@ def get_job(job_id: str, x_auth_token: Optional[str] = Header(None)):
 def delete_job(job_id: str, x_auth_token: Optional[str] = Header(None)):
     check_auth(x_auth_token)
     JOBS.pop(job_id, None)
+    (JOBS_DIR / f"{job_id}.json").unlink(missing_ok=True)
     return {"ok": True}
+
+
+@app.delete("/api/jobs")
+def delete_all_jobs(x_auth_token: Optional[str] = Header(None)):
+    """清空所有历史"""
+    check_auth(x_auth_token)
+    n = len(JOBS)
+    JOBS.clear()
+    for f in JOBS_DIR.glob("*.json"):
+        f.unlink(missing_ok=True)
+    return {"ok": True, "deleted": n}
 
 
 @app.get("/api/health")

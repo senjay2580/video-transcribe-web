@@ -51,16 +51,23 @@ def find_yt_dlp() -> list[str]:
 
 
 def download(url: str, tmp_dir: str, log: Callable[[str], None]) -> tuple[str, str]:
-    """下载视频，返回 (file_path, title)"""
+    """下载视频，返回 (file_path, title)。带浏览器 UA + Referer 绕 B站 412"""
     yt = find_yt_dlp()
     out_tpl = os.path.join(tmp_dir, "%(title).80s.%(ext)s")
+    ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+    # 按域名挑 Referer（B站 412 主要靠这个绕）
+    referer = "https://www.bilibili.com" if "bilibili" in url or "b23.tv" in url else url
     last_err = ""
     for fmt in ("ba/b", "b"):
         log(f"yt-dlp -f {fmt} ...")
         cmd = list(yt) + [
             "-f", fmt, "--no-playlist", "-o", out_tpl,
             "--no-warnings", "--retries", "3",
-            "--fragment-retries", "3", "--socket-timeout", "30", url,
+            "--fragment-retries", "3", "--socket-timeout", "30",
+            "--user-agent", ua,
+            "--referer", referer,
+            "--add-header", "Accept-Language:zh-CN,zh;q=0.9,en;q=0.8",
+            url,
         ]
         r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
         if r.returncode == 0:
