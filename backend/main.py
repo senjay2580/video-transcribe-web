@@ -231,7 +231,7 @@ def health():
 
 # ─── Cookies 上传 / 管理 ──────────────────────────────────────────────
 
-ALLOWED_COOKIE_PLATFORMS = {"bilibili", "youtube"}
+ALLOWED_COOKIE_PLATFORMS = {"bilibili"}
 
 
 @app.get("/api/cookies")
@@ -254,7 +254,6 @@ class CookiesUpload(BaseModel):
 
 PLATFORM_DOMAIN = {
     "bilibili": "bilibili.com",
-    "youtube": "youtube.com",
 }
 
 

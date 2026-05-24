@@ -73,8 +73,6 @@ def download(url: str, tmp_dir: str, log: Callable[[str], None]) -> tuple[str, s
 
     if is_bilibili:
         cookies_file = _pick("bilibili", "BILIBILI_COOKIES")
-    elif "youtube" in url or "youtu.be" in url:
-        cookies_file = _pick("youtube", "YOUTUBE_COOKIES")
     if cookies_file:
         log(f"using cookies: {os.path.basename(cookies_file)}")
 
