@@ -6,6 +6,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 from pathlib import Path
@@ -35,9 +36,18 @@ def find_ffmpeg() -> str:
 
 
 def find_yt_dlp() -> list[str]:
+    """优先用 venv 的 python -m yt_dlp（确保用 venv 里 pip 装的 yt-dlp），fallback 到 PATH 上的 yt-dlp"""
+    # 1. 当前 Python 解释器的 yt_dlp 模块（venv 里的）
+    try:
+        subprocess.run([sys.executable, "-m", "yt_dlp", "--version"],
+                       capture_output=True, check=True)
+        return [sys.executable, "-m", "yt_dlp"]
+    except (FileNotFoundError, subprocess.CalledProcessError, OSError):
+        pass
+    # 2. PATH 上的 yt-dlp 二进制
     if shutil.which("yt-dlp"):
         return ["yt-dlp"]
-    return ["python3", "-m", "yt_dlp"]
+    raise TranscribeError("yt-dlp not installed (pip install yt-dlp)")
 
 
 def download(url: str, tmp_dir: str, log: Callable[[str], None]) -> tuple[str, str]:

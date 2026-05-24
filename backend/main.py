@@ -17,6 +17,9 @@ from transcribe_lib import TranscribeError, transcribe_one
 
 GROQ_API_KEYS = [k.strip() for k in os.environ.get("GROQ_API_KEYS", "").split(",") if k.strip()]
 WEB_PASSWORD = os.environ.get("WEB_PASSWORD", "").strip()
+LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "https://api.deepseek.com/v1").strip()
+LLM_API_KEY = os.environ.get("LLM_API_KEY", "").strip()
+LLM_MODEL = os.environ.get("LLM_MODEL", "deepseek-chat").strip()
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 
 if not GROQ_API_KEYS:
@@ -39,9 +42,6 @@ def check_auth(token: Optional[str]):
 class TranscribeRequest(BaseModel):
     urls: list[str]
     lang: str = "zh"
-    llm_base_url: str = ""
-    llm_api_key: str = ""
-    llm_model: str = "deepseek-chat"
     do_polish: bool = True
 
 
@@ -63,9 +63,9 @@ def _worker(job_id: str, item_idx: int, url: str, req: TranscribeRequest):
         result = transcribe_one(
             url, GROQ_API_KEYS,
             lang=req.lang,
-            llm_base_url=req.llm_base_url,
-            llm_key=req.llm_api_key,
-            llm_model=req.llm_model,
+            llm_base_url=LLM_BASE_URL,
+            llm_key=LLM_API_KEY,
+            llm_model=LLM_MODEL,
             do_polish=req.do_polish,
             log=log,
         )
@@ -139,6 +139,8 @@ def health():
         "ok": True,
         "groq_keys": len(GROQ_API_KEYS),
         "auth_required": bool(WEB_PASSWORD),
+        "llm_configured": bool(LLM_API_KEY),
+        "llm_model": LLM_MODEL,
         "jobs_in_memory": len(JOBS),
     }
 

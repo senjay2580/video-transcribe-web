@@ -251,39 +251,15 @@
     <div id="status-pill" class="status-pill">connecting…</div>
   </header>
 
-  <!-- LLM 配置 -->
-  <div class="card">
-    <div class="card-header">
-      <div class="card-title">LLM 校对配置（OpenAI 兼容）</div>
-      <span class="card-action" onclick="toggleCard('llm-body')">▾</span>
-    </div>
-    <div id="llm-body" class="form-grid">
-      <div class="field">
-        <label>Base URL</label>
-        <input id="llm-base" placeholder="https://api.deepseek.com/v1" />
-      </div>
-      <div class="field">
-        <label>Model</label>
-        <input id="llm-model" placeholder="deepseek-chat" />
-      </div>
-      <div class="field" style="grid-column: 1 / -1;">
-        <label>API Key</label>
-        <input id="llm-key" type="password" placeholder="sk-..." />
-      </div>
-      <div class="field" style="grid-column: 1 / -1;">
-        <div class="checkbox-row">
-          <input type="checkbox" id="do-polish" checked />
-          <label for="do-polish">启用 LLM 校对（关掉只输出 Whisper 原始文本，0 LLM 调用）</label>
-        </div>
-      </div>
-    </div>
-  </div>
-
   <!-- 输入 -->
   <div class="card">
     <div class="card-header">
       <div class="card-title">视频链接</div>
       <div style="display:flex; gap: 10px; align-items: center;">
+        <div class="checkbox-row" style="margin-right: 4px;">
+          <input type="checkbox" id="do-polish" checked />
+          <label for="do-polish" style="font-size: 12px; color: var(--text-muted);">LLM 校对</label>
+        </div>
         <select id="lang" style="width: auto; padding: 5px 10px; font-size: 12px;">
           <option value="zh">中文</option>
           <option value="en">English</option>
@@ -366,25 +342,19 @@ function toggleCard(id) {
   el.style.display = el.style.display === 'none' ? '' : 'none';
 }
 
-// 持久化 LLM 配置
+// 持久化用户偏好（只剩 lang + polish toggle）
 function loadConfig() {
   const cfg = JSON.parse(localStorage.getItem('vt_cfg') || '{}');
-  document.getElementById('llm-base').value = cfg.llm_base_url ?? 'https://api.deepseek.com/v1';
-  document.getElementById('llm-model').value = cfg.llm_model ?? 'deepseek-chat';
-  document.getElementById('llm-key').value = cfg.llm_api_key ?? '';
   document.getElementById('do-polish').checked = cfg.do_polish !== false;
   document.getElementById('lang').value = cfg.lang ?? 'zh';
 }
 function saveConfig() {
   localStorage.setItem('vt_cfg', JSON.stringify({
-    llm_base_url: document.getElementById('llm-base').value.trim(),
-    llm_model: document.getElementById('llm-model').value.trim(),
-    llm_api_key: document.getElementById('llm-key').value.trim(),
     do_polish: document.getElementById('do-polish').checked,
     lang: document.getElementById('lang').value,
   }));
 }
-['llm-base','llm-model','llm-key','do-polish','lang'].forEach(id =>
+['do-polish','lang'].forEach(id =>
   document.addEventListener('DOMContentLoaded', () =>
     document.getElementById(id).addEventListener('change', saveConfig)));
 
@@ -393,7 +363,8 @@ async function refreshHealth() {
   try {
     const h = await api('GET', '/api/health');
     pill.className = 'status-pill ok';
-    pill.textContent = `groq:${h.groq_keys} jobs:${h.jobs_in_memory}`;
+    const llmTag = h.llm_configured ? `llm:${h.llm_model}` : 'llm:✗';
+    pill.textContent = `groq:${h.groq_keys} ${llmTag} jobs:${h.jobs_in_memory}`;
   } catch (e) {
     pill.className = 'status-pill err';
     pill.textContent = e.message.substring(0, 30);
@@ -407,9 +378,6 @@ async function startTranscribe() {
   saveConfig();
   const body = {
     urls, lang: document.getElementById('lang').value,
-    llm_base_url: document.getElementById('llm-base').value.trim(),
-    llm_api_key: document.getElementById('llm-key').value.trim(),
-    llm_model: document.getElementById('llm-model').value.trim() || 'deepseek-chat',
     do_polish: document.getElementById('do-polish').checked,
   };
   const btn = document.getElementById('submit-btn');
