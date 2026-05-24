@@ -243,16 +243,22 @@
     display: flex; justify-content: space-between; align-items: center;
     gap: 12px; flex-wrap: wrap;
   }
-  .result-title-area { min-width: 0; flex: 1; }
+  .result-title-area { min-width: 0; flex: 1; max-width: 100%; overflow: hidden; }
   .result-title {
     font-size: 16px; font-weight: 600; margin-bottom: 4px;
-    overflow: hidden; text-overflow: ellipsis;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    max-width: 100%;
   }
   .result-url {
     font-family: var(--font-mono); font-size: 11px; color: var(--text-faint);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    max-width: 100%; display: block;
   }
-  .result-url a { color: var(--text-faint); }
+  .result-url a {
+    color: var(--text-faint); display: inline-block; max-width: 100%;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    vertical-align: bottom;
+  }
   .result-url a:hover { color: var(--accent); }
 
   .tabs {
@@ -623,6 +629,12 @@ function escapeHTML(s) {
     .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+function truncate(s, n) {
+  if (s == null) return '';
+  s = String(s);
+  return s.length > n ? s.substring(0, n - 1) + '…' : s;
+}
+
 function timeAgo(ts) {
   const s = Math.floor((Date.now() / 1000) - ts);
   if (s < 60) return s + 's';
@@ -805,13 +817,16 @@ function renderItemFull(jobId, it) {
   const elapsed = it.elapsed ? `${it.elapsed.toFixed(1)}s` : '';
   const titleStr = it.title || `视频 #${it.idx + 1}`;
 
+  const shortTitle = truncate(titleStr, 80);
+  const shortUrl = truncate(it.url, 100);
+
   if (it.status === 'pending' || it.status === 'running') {
     return `
       <div>
         <div class="result-header">
           <div class="result-title-area">
-            <div class="result-title">${escapeHTML(titleStr)}</div>
-            <div class="result-url"><a href="${escapeHTML(it.url)}" target="_blank">${escapeHTML(it.url)}</a></div>
+            <div class="result-title" title="${escapeHTML(titleStr)}">${escapeHTML(shortTitle)}</div>
+            <div class="result-url"><a href="${escapeHTML(it.url)}" target="_blank" title="${escapeHTML(it.url)}">${escapeHTML(shortUrl)}</a></div>
           </div>
           <span class="status-pill" style="color: var(--accent); border-color: rgba(245,158,11,0.3);">${it.status}</span>
         </div>
@@ -825,8 +840,8 @@ function renderItemFull(jobId, it) {
       <div>
         <div class="result-header">
           <div class="result-title-area">
-            <div class="result-title">${escapeHTML(titleStr)}</div>
-            <div class="result-url"><a href="${escapeHTML(it.url)}" target="_blank">${escapeHTML(it.url)}</a></div>
+            <div class="result-title" title="${escapeHTML(titleStr)}">${escapeHTML(shortTitle)}</div>
+            <div class="result-url"><a href="${escapeHTML(it.url)}" target="_blank" title="${escapeHTML(it.url)}">${escapeHTML(shortUrl)}</a></div>
           </div>
           <span class="status-pill" style="color: var(--error); border-color: rgba(244,63,94,0.3);">failed</span>
         </div>
@@ -842,8 +857,8 @@ function renderItemFull(jobId, it) {
     <div>
       <div class="result-header">
         <div class="result-title-area">
-          <div class="result-title">${escapeHTML(titleStr)}</div>
-          <div class="result-url"><a href="${escapeHTML(it.url)}" target="_blank">${escapeHTML(it.url)}</a></div>
+          <div class="result-title" title="${escapeHTML(titleStr)}">${escapeHTML(shortTitle)}</div>
+          <div class="result-url"><a href="${escapeHTML(it.url)}" target="_blank" title="${escapeHTML(it.url)}">${escapeHTML(shortUrl)}</a></div>
         </div>
         <span class="elapsed status-pill" style="color: var(--success); border-color: rgba(16,185,129,0.3);">${elapsed}</span>
       </div>
