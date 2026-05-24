@@ -2,8 +2,9 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Video Transcribe — Web</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#09090b" />
+<title>Video Transcribe</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -12,19 +13,27 @@
     --bg: #09090b;
     --bg-elev: #18181b;
     --bg-card: #1c1c20;
+    --bg-hover: #27272a;
     --border: #27272a;
     --border-strong: #3f3f46;
     --text: #fafafa;
     --text-muted: #a1a1aa;
     --text-faint: #71717a;
     --accent: #f59e0b;
-    --accent-dim: #fbbf2422;
-    --success: #22c55e;
-    --error: #ef4444;
+    --accent-dim: rgba(245, 158, 11, 0.15);
+    --success: #10b981;
+    --success-glow: rgba(16, 185, 129, 0.3);
+    --success-bg: rgba(16, 185, 129, 0.08);
+    --error: #f43f5e;
+    --error-bg: rgba(244, 63, 94, 0.08);
     --warning: #eab308;
-    --radius: 6px;
+    --radius: 8px;
+    --radius-sm: 4px;
     --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
     --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    --sidebar-w: 260px;
+    --header-h: 60px;
+    --bottom-h: 240px;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body {
@@ -34,81 +43,179 @@
     font-size: 14px;
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
+    height: 100%;
+    overflow: hidden;
   }
-  body { min-height: 100vh; }
   a { color: var(--accent); text-decoration: none; }
-  a:hover { text-decoration: underline; }
+  button { font-family: inherit; }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text-faint); }
 
-  /* ── Layout ─────────────────────────── */
-  .container { max-width: 1100px; margin: 0 auto; padding: 32px 24px 80px; }
-  header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px; }
-  h1 {
-    font-size: 20px; font-weight: 600; letter-spacing: -0.01em;
+  /* ── App Grid ─────────────────────────── */
+  .app {
+    display: grid;
+    grid-template-columns: var(--sidebar-w) 1fr;
+    grid-template-rows: var(--header-h) 1fr auto;
+    grid-template-areas:
+      "header header"
+      "sidebar main"
+      "bottom bottom";
+    height: 100vh;
+    height: 100dvh;
+  }
+
+  /* ── Header ─────────────────────────── */
+  .app-header {
+    grid-area: header;
+    display: flex; align-items: center; gap: 12px;
+    padding: 0 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-elev);
+  }
+  .app-title {
+    font-size: 15px; font-weight: 600; letter-spacing: -0.01em;
     display: flex; align-items: center; gap: 10px;
   }
-  h1::before {
+  .app-title::before {
     content: ''; width: 6px; height: 6px; border-radius: 50%;
-    background: var(--accent); box-shadow: 0 0 12px var(--accent);
+    background: var(--accent); box-shadow: 0 0 10px var(--accent);
   }
+  .menu-btn {
+    background: transparent; border: 1px solid var(--border-strong);
+    color: var(--text); padding: 6px 10px; border-radius: var(--radius-sm);
+    cursor: pointer; display: none; font-size: 16px;
+  }
+  .header-spacer { flex: 1; }
   .status-pill {
-    font-size: 12px; color: var(--text-muted);
+    font-size: 11px; color: var(--text-muted);
     font-family: var(--font-mono); padding: 4px 10px;
     border: 1px solid var(--border); border-radius: 999px;
   }
-  .status-pill.ok { color: var(--success); border-color: #22c55e44; }
-  .status-pill.err { color: var(--error); border-color: #ef444444; }
+  .status-pill.ok { color: var(--success); border-color: rgba(16,185,129,0.3); }
+  .status-pill.err { color: var(--error); border-color: rgba(244,63,94,0.3); }
 
-  /* ── Card ─────────────────────────── */
-  .card {
-    background: var(--bg-card); border: 1px solid var(--border);
-    border-radius: var(--radius); padding: 20px;
-    margin-bottom: 16px;
+  /* ── Sidebar (History) ─────────────────────────── */
+  .sidebar {
+    grid-area: sidebar;
+    background: var(--bg-elev);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    display: flex; flex-direction: column;
   }
-  .card-header {
+  .sidebar-header {
+    padding: 14px 16px;
     display: flex; justify-content: space-between; align-items: center;
-    margin-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; background: var(--bg-elev); z-index: 1;
   }
-  .card-title { font-size: 13px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
-  .card-action {
-    font-size: 12px; color: var(--text-faint); cursor: pointer;
-    user-select: none; padding: 2px 6px;
-  }
-  .card-action:hover { color: var(--text); }
-
-  /* ── Form ─────────────────────────── */
-  .form-grid {
-    display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
-  }
-  .form-grid.full { grid-template-columns: 1fr; }
-  .field { display: flex; flex-direction: column; gap: 4px; }
-  .field label {
+  .sidebar-title {
     font-size: 11px; color: var(--text-muted);
-    font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em;
+    font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
   }
-  input, textarea, select {
-    background: var(--bg-elev); border: 1px solid var(--border);
-    border-radius: 4px; padding: 8px 10px; color: var(--text);
-    font-family: var(--font-mono); font-size: 13px;
-    transition: border-color 0.15s, background 0.15s;
-    width: 100%;
+  .sidebar-action {
+    font-size: 11px; color: var(--text-faint); cursor: pointer;
+    padding: 2px 6px; border-radius: var(--radius-sm);
   }
-  input:focus, textarea:focus, select:focus {
-    outline: none; border-color: var(--accent);
+  .sidebar-action:hover { color: var(--error); background: var(--error-bg); }
+  .sidebar-list { flex: 1; padding: 6px; }
+  .sidebar-empty {
+    padding: 40px 16px; text-align: center;
+    color: var(--text-faint); font-size: 12px;
+  }
+  .history-item {
+    padding: 10px 12px; border-radius: var(--radius-sm);
+    cursor: pointer; margin-bottom: 2px;
+    transition: background 0.1s;
+    display: flex; flex-direction: column; gap: 4px;
+    position: relative;
+  }
+  .history-item:hover { background: var(--bg-hover); }
+  .history-item.selected { background: var(--accent-dim); }
+  .history-item.selected::before {
+    content: ''; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px;
+    background: var(--accent); border-radius: 0 2px 2px 0;
+  }
+  .history-item-top {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 12px; font-family: var(--font-mono); color: var(--text-faint);
+  }
+  .history-item-title {
+    font-size: 13px; color: var(--text);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .history-item-meta {
+    font-size: 11px; color: var(--text-faint);
+    display: flex; gap: 8px;
+  }
+  .dot {
+    width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+  }
+  .dot.running { background: var(--accent); box-shadow: 0 0 6px var(--accent); animation: pulse 1.5s ease-in-out infinite; }
+  .dot.done { background: var(--success); }
+  .dot.failed { background: var(--error); }
+  .dot.partial { background: var(--warning); }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  .history-item-delete {
+    position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+    background: var(--bg-card); border: 1px solid var(--border);
+    color: var(--text-faint); width: 22px; height: 22px;
+    border-radius: 50%; cursor: pointer; display: none;
+    align-items: center; justify-content: center; font-size: 14px;
+    line-height: 1;
+  }
+  .history-item:hover .history-item-delete { display: flex; }
+  .history-item-delete:hover { color: var(--error); border-color: var(--error); }
+
+  /* ── Main (Transcript) ─────────────────────────── */
+  .main {
+    grid-area: main;
+    overflow: hidden;
+    display: flex; flex-direction: column;
+    min-width: 0;
+  }
+  .input-bar {
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex; gap: 10px; align-items: flex-start;
     background: var(--bg);
   }
-  textarea { resize: vertical; min-height: 100px; }
-  .checkbox-row { display: flex; align-items: center; gap: 8px; }
-  .checkbox-row input[type=checkbox] { width: 14px; height: 14px; cursor: pointer; }
-  .checkbox-row label { text-transform: none; letter-spacing: 0; color: var(--text); font-size: 13px; }
-
-  /* ── Button ─────────────────────────── */
+  .input-bar textarea {
+    flex: 1; min-height: 38px; max-height: 120px;
+    background: var(--bg-elev); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 8px 12px;
+    color: var(--text); font-family: var(--font-mono); font-size: 13px;
+    resize: vertical; line-height: 1.5;
+  }
+  .input-bar textarea:focus {
+    outline: none; border-color: var(--accent); background: var(--bg);
+  }
+  .input-bar .controls {
+    display: flex; gap: 8px; align-items: center; flex-shrink: 0;
+  }
+  .input-bar .checkbox-row {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 12px; color: var(--text-muted); cursor: pointer;
+  }
+  .input-bar .checkbox-row input { width: 14px; height: 14px; cursor: pointer; }
+  select {
+    background: var(--bg-elev); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 7px 10px;
+    color: var(--text); font-family: var(--font-mono); font-size: 12px;
+    cursor: pointer;
+  }
   .btn {
     display: inline-flex; align-items: center; gap: 6px;
     background: var(--accent); color: #000;
-    border: none; padding: 9px 16px; border-radius: 4px;
-    font-size: 13px; font-weight: 600;
-    cursor: pointer; transition: opacity 0.15s, transform 0.05s;
-    font-family: var(--font-sans);
+    border: none; padding: 8px 16px; border-radius: var(--radius-sm);
+    font-size: 13px; font-weight: 600; cursor: pointer;
+    transition: opacity 0.15s, transform 0.05s;
   }
   .btn:hover { opacity: 0.9; }
   .btn:active { transform: translateY(1px); }
@@ -120,88 +227,165 @@
   .btn-secondary:hover { background: var(--bg-elev); opacity: 1; }
   .btn-small { padding: 4px 10px; font-size: 12px; font-weight: 500; }
 
-  /* ── Result Items ─────────────────────────── */
-  .item {
-    background: var(--bg-card); border: 1px solid var(--border);
-    border-radius: var(--radius); margin-bottom: 12px;
-    overflow: hidden;
+  .main-content {
+    flex: 1; overflow-y: auto; padding: 20px;
+    display: flex; flex-direction: column;
   }
-  .item-header {
+  .empty-state {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    color: var(--text-faint); text-align: center; gap: 8px;
+  }
+  .empty-state-emoji { font-size: 36px; opacity: 0.5; }
+
+  .result-header {
+    margin-bottom: 16px;
     display: flex; justify-content: space-between; align-items: center;
-    padding: 14px 18px; background: var(--bg-elev);
-    border-bottom: 1px solid var(--border);
-    cursor: pointer; user-select: none;
+    gap: 12px; flex-wrap: wrap;
   }
-  .item-header.no-bottom { border-bottom: none; }
-  .item-meta { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; }
-  .item-idx {
-    font-family: var(--font-mono); font-size: 11px;
-    color: var(--text-faint); min-width: 28px;
+  .result-title-area { min-width: 0; flex: 1; }
+  .result-title {
+    font-size: 16px; font-weight: 600; margin-bottom: 4px;
+    overflow: hidden; text-overflow: ellipsis;
   }
-  .item-title {
-    font-size: 13px; font-weight: 500; color: var(--text);
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    flex: 1;
-  }
-  .item-url {
+  .result-url {
     font-family: var(--font-mono); font-size: 11px; color: var(--text-faint);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
-  .badge {
-    padding: 2px 8px; border-radius: 999px; font-size: 11px;
-    font-family: var(--font-mono); font-weight: 500; flex-shrink: 0;
-  }
-  .badge.pending { background: #71717a22; color: var(--text-faint); }
-  .badge.running { background: var(--accent-dim); color: var(--accent); }
-  .badge.done { background: #22c55e22; color: var(--success); }
-  .badge.failed { background: #ef444422; color: var(--error); }
-  .elapsed { font-family: var(--font-mono); font-size: 11px; color: var(--text-faint); }
+  .result-url a { color: var(--text-faint); }
+  .result-url a:hover { color: var(--accent); }
 
-  .item-body { padding: 0; display: none; }
-  .item-body.open { display: block; }
   .tabs {
-    display: flex; gap: 0; border-bottom: 1px solid var(--border);
-    padding: 0 18px;
+    display: flex; gap: 0;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 16px;
   }
   .tab {
-    padding: 10px 14px; cursor: pointer; font-size: 12px;
+    padding: 10px 16px; cursor: pointer; font-size: 13px;
     color: var(--text-muted); border-bottom: 2px solid transparent;
     margin-bottom: -1px; user-select: none;
     transition: color 0.15s, border-color 0.15s;
   }
   .tab:hover { color: var(--text); }
   .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
-  .tab-content { padding: 16px 18px; }
-  .tab-pane { display: none; }
-  .tab-pane.active { display: block; }
+  .tab-content { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  .tab-pane { display: none; flex: 1; flex-direction: column; min-height: 0; }
+  .tab-pane.active { display: flex; }
+  .tab-toolbar {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 10px;
+  }
+  .tab-toolbar .meta {
+    font-size: 11px; color: var(--text-faint); font-family: var(--font-mono);
+  }
   .text-block {
-    background: var(--bg); border: 1px solid var(--border);
-    border-radius: 4px; padding: 14px;
-    font-family: var(--font-mono); font-size: 12.5px;
-    white-space: pre-wrap; word-wrap: break-word; max-height: 500px;
-    overflow-y: auto; line-height: 1.7;
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 16px;
+    font-family: var(--font-mono); font-size: 13px;
+    white-space: pre-wrap; word-wrap: break-word;
+    line-height: 1.75; flex: 1; overflow-y: auto;
   }
   .log-block {
-    background: var(--bg); border: 1px solid var(--border); border-radius: 4px;
-    padding: 10px 12px; font-family: var(--font-mono); font-size: 11.5px;
-    max-height: 240px; overflow-y: auto; color: var(--text-muted);
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 10px 14px; font-family: var(--font-mono); font-size: 11.5px;
+    color: var(--text-muted); flex: 1; overflow-y: auto;
   }
   .log-line { padding: 1px 0; }
-  .copy-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-  .copy-row .small-label { font-size: 11px; color: var(--text-faint); font-family: var(--font-mono); }
-
   .error-msg {
-    background: #ef444411; border: 1px solid #ef444444;
-    color: #fca5a5; padding: 12px 16px; border-radius: 4px;
-    font-family: var(--font-mono); font-size: 12px;
-    white-space: pre-wrap;
+    background: var(--error-bg); border: 1px solid rgba(244,63,94,0.3);
+    color: #fecaca; padding: 14px 18px; border-radius: var(--radius-sm);
+    font-family: var(--font-mono); font-size: 12.5px;
+    white-space: pre-wrap; word-wrap: break-word;
+    margin-bottom: 16px;
   }
 
-  /* ── Modal (auth prompt) ─────────────────────────── */
+  /* ── Bottom (Active Jobs Grid) ─────────────────────────── */
+  .bottom {
+    grid-area: bottom;
+    background: var(--bg-elev);
+    border-top: 1px solid var(--border);
+    padding: 12px 20px;
+    max-height: var(--bottom-h);
+    overflow-y: auto;
+    transition: max-height 0.2s;
+  }
+  .bottom.empty { padding: 0; max-height: 0; border-top: none; }
+  .bottom-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 8px;
+  }
+  .bottom-title {
+    font-size: 11px; color: var(--text-muted); font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .bottom-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 8px;
+  }
+  .job-card {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 10px 12px;
+    cursor: pointer; min-width: 0;
+    transition: border-color 0.15s, background 0.3s;
+    display: flex; flex-direction: column; gap: 6px;
+    position: relative; overflow: hidden;
+  }
+  .job-card:hover { border-color: var(--border-strong); }
+  .job-card.running {
+    border-color: rgba(245,158,11,0.4);
+  }
+  .job-card.running::after {
+    content: ''; position: absolute; left: 0; top: 0; height: 2px;
+    width: 30%; background: var(--accent);
+    animation: progress-slide 1.5s ease-in-out infinite;
+  }
+  @keyframes progress-slide {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(400%); }
+  }
+  .job-card.done {
+    background: var(--success-bg);
+    border-color: rgba(16,185,129,0.4);
+  }
+  .job-card.just-done {
+    animation: pulse-success 1.8s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  @keyframes pulse-success {
+    0% { background: rgba(16,185,129,0.45); box-shadow: 0 0 24px var(--success-glow); }
+    100% { background: var(--success-bg); box-shadow: none; }
+  }
+  .job-card.failed {
+    background: var(--error-bg);
+    border-color: rgba(244,63,94,0.4);
+  }
+  .job-card-top {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 11px; font-family: var(--font-mono);
+  }
+  .job-card-idx { color: var(--text-faint); }
+  .job-card-status { color: var(--text-muted); }
+  .job-card.done .job-card-status { color: var(--success); }
+  .job-card.failed .job-card-status { color: var(--error); }
+  .job-card.running .job-card-status { color: var(--accent); }
+  .job-card-title {
+    font-size: 12px; color: var(--text);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-weight: 500;
+  }
+  .job-card-log {
+    font-family: var(--font-mono); font-size: 10.5px;
+    color: var(--text-faint); line-height: 1.4;
+    overflow: hidden; text-overflow: ellipsis;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    min-height: 28px;
+  }
+
+  /* ── Modal ─────────────────────────── */
   .modal-bg {
     position: fixed; inset: 0; background: rgba(0,0,0,0.7);
     display: flex; align-items: center; justify-content: center;
-    z-index: 1000;
+    z-index: 1000; backdrop-filter: blur(4px);
   }
   .modal {
     background: var(--bg-card); border: 1px solid var(--border-strong);
@@ -209,34 +393,79 @@
     width: 360px; max-width: 90vw;
   }
   .modal h2 { font-size: 16px; margin-bottom: 16px; }
+  .modal input {
+    width: 100%; background: var(--bg-elev); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 10px 12px;
+    color: var(--text); font-family: var(--font-mono); font-size: 13px;
+  }
+  .modal input:focus { outline: none; border-color: var(--accent); }
   .hidden { display: none !important; }
 
   /* ── Toast ─────────────────────────── */
   .toast {
-    position: fixed; bottom: 24px; right: 24px;
+    position: fixed; bottom: calc(var(--bottom-h) + 24px); right: 24px;
     background: var(--bg-card); border: 1px solid var(--border-strong);
-    color: var(--text); padding: 10px 16px; border-radius: 4px;
+    color: var(--text); padding: 10px 16px; border-radius: var(--radius-sm);
     font-size: 13px; box-shadow: 0 8px 24px rgba(0,0,0,0.4);
     z-index: 999; opacity: 0; transition: opacity 0.2s, transform 0.2s;
     transform: translateY(8px);
   }
   .toast.show { opacity: 1; transform: translateY(0); }
 
-  /* responsive */
-  @media (max-width: 600px) {
-    .form-grid { grid-template-columns: 1fr; }
-    .container { padding: 20px 14px 60px; }
-    h1 { font-size: 17px; }
+  /* ── Backdrop for mobile drawer ─────────────────────────── */
+  .backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+    z-index: 50; display: none;
+  }
+  .backdrop.show { display: block; }
+
+  /* ── Mobile Responsive ─────────────────────────── */
+  @media (max-width: 768px) {
+    :root {
+      --bottom-h: 30vh;
+    }
+    .app {
+      grid-template-columns: 1fr;
+      grid-template-areas:
+        "header"
+        "main"
+        "bottom";
+    }
+    .menu-btn { display: inline-flex; }
+    .sidebar {
+      position: fixed; left: 0; top: 0; bottom: 0; width: 280px;
+      z-index: 100;
+      transform: translateX(-100%);
+      transition: transform 0.25s ease-out;
+      border-right: 1px solid var(--border-strong);
+      box-shadow: 4px 0 24px rgba(0,0,0,0.4);
+    }
+    .sidebar.open { transform: translateX(0); }
+    .input-bar { flex-wrap: wrap; }
+    .input-bar .controls { width: 100%; justify-content: space-between; }
+    .main-content { padding: 14px; }
+    .text-block { font-size: 12px; padding: 12px; }
+    .bottom-grid { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+    .result-header { flex-direction: column; align-items: flex-start; }
+    .toast { right: 16px; left: 16px; bottom: calc(var(--bottom-h) + 16px); }
+  }
+
+  @media (max-width: 480px) {
+    .input-bar textarea { font-size: 12px; }
+    .bottom-grid { grid-template-columns: 1fr 1fr; gap: 6px; }
+    .job-card { padding: 8px 10px; }
+    .job-card-log { -webkit-line-clamp: 1; min-height: 14px; }
   }
 </style>
 </head>
 <body>
 
+<!-- Auth Modal -->
 <div id="auth-modal" class="modal-bg hidden">
   <div class="modal">
     <h2>访问密码</h2>
     <p style="color: var(--text-muted); margin-bottom: 16px; font-size: 13px;">
-      该实例需要密码访问。输入后保存在本机 localStorage。
+      该实例需要密码访问，输入后保存在本机 localStorage。
     </p>
     <input type="password" id="auth-input" placeholder="password" autocomplete="off" />
     <div style="display:flex; justify-content:flex-end; margin-top: 16px;">
@@ -245,57 +474,98 @@
   </div>
 </div>
 
-<div class="container">
-  <header>
-    <h1>Video Transcribe</h1>
-    <div id="status-pill" class="status-pill">connecting…</div>
-  </header>
+<div id="backdrop" class="backdrop" onclick="closeSidebar()"></div>
 
-  <!-- 输入 -->
-  <div class="card">
-    <div class="card-header">
-      <div class="card-title">视频链接</div>
-      <div style="display:flex; gap: 10px; align-items: center;">
-        <div class="checkbox-row" style="margin-right: 4px;">
+<div class="app">
+
+  <!-- Header -->
+  <div class="app-header">
+    <button class="menu-btn" onclick="toggleSidebar()">☰</button>
+    <div class="app-title">Video Transcribe</div>
+    <div class="header-spacer"></div>
+    <div id="status-pill" class="status-pill">connecting…</div>
+  </div>
+
+  <!-- Sidebar: History -->
+  <div id="sidebar" class="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-title">历史记录</div>
+      <span class="sidebar-action" onclick="deleteAllJobs()">清空</span>
+    </div>
+    <div id="sidebar-list" class="sidebar-list">
+      <div class="sidebar-empty">还没记录</div>
+    </div>
+  </div>
+
+  <!-- Main: Input + Selected Result -->
+  <div class="main">
+    <div class="input-bar">
+      <textarea id="urls" placeholder="一行一个 URL，最多 12 路并发 · B站 / YouTube / TikTok ..." rows="1"></textarea>
+      <div class="controls">
+        <label class="checkbox-row">
           <input type="checkbox" id="do-polish" checked />
-          <label for="do-polish" style="font-size: 12px; color: var(--text-muted);">LLM 校对</label>
-        </div>
-        <select id="lang" style="width: auto; padding: 5px 10px; font-size: 12px;">
+          LLM 校对
+        </label>
+        <select id="lang">
           <option value="zh">中文</option>
           <option value="en">English</option>
           <option value="ja">日本語</option>
         </select>
-        <button class="btn" id="submit-btn" onclick="startTranscribe()">开始转录</button>
+        <button class="btn" id="submit-btn" onclick="startTranscribe()">转录</button>
       </div>
     </div>
-    <div class="form-grid full">
-      <div class="field">
-        <textarea id="urls" placeholder="一行一个 URL，支持 B站 / YouTube / TikTok 等&#10;https://www.bilibili.com/video/BV...&#10;https://www.youtube.com/watch?v=..."></textarea>
-        <div style="font-size: 11px; color: var(--text-faint); margin-top: 4px; font-family: var(--font-mono);">
-          最多 12 路并发，默认 6 路（服务端限制）
-        </div>
+    <div id="main-content" class="main-content">
+      <div class="empty-state">
+        <div class="empty-state-emoji">🎬</div>
+        <div>从左侧选一条历史，或粘 URL 提交新任务</div>
       </div>
     </div>
   </div>
 
-  <!-- 任务列表 -->
-  <div id="jobs"></div>
+  <!-- Bottom: Active Jobs Grid -->
+  <div id="bottom" class="bottom empty">
+    <div class="bottom-header">
+      <div class="bottom-title">活动任务</div>
+      <div id="bottom-stats" class="status-pill"></div>
+    </div>
+    <div id="bottom-grid" class="bottom-grid"></div>
+  </div>
+
 </div>
 
 <div id="toast" class="toast"></div>
 
 <script>
 const API = window.location.origin;
-let AUTH_TOKEN = localStorage.getItem('vt_token') || '';
 const POLL_INTERVAL = 1500;
-const activeJobs = new Map();  // job_id -> {pollHandle, items}
+let AUTH_TOKEN = localStorage.getItem('vt_token') || '';
+let SELECTED_JOB_ID = null;
+let ACTIVE_JOB_ID = null;   // 最近提交的 job（底部网格展示这个）
+let pollTimer = null;
+let healthTimer = null;
+const itemPrevStatus = new Map();  // jobId-idx -> prev status (for just-done detection)
 
+// ─── Utils ───────────────────────────────────────────────
 function toast(msg, ms = 2000) {
   const el = document.getElementById('toast');
   el.textContent = msg;
   el.classList.add('show');
   clearTimeout(toast._t);
   toast._t = setTimeout(() => el.classList.remove('show'), ms);
+}
+
+function escapeHTML(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function timeAgo(ts) {
+  const s = Math.floor((Date.now() / 1000) - ts);
+  if (s < 60) return s + 's';
+  if (s < 3600) return Math.floor(s/60) + 'm';
+  if (s < 86400) return Math.floor(s/3600) + 'h';
+  return Math.floor(s/86400) + 'd';
 }
 
 function api(method, path, body) {
@@ -318,6 +588,7 @@ function api(method, path, body) {
   });
 }
 
+// ─── Auth ───────────────────────────────────────────────
 function showAuthModal() {
   document.getElementById('auth-modal').classList.remove('hidden');
   setTimeout(() => document.getElementById('auth-input').focus(), 50);
@@ -329,20 +600,22 @@ function submitAuth() {
   AUTH_TOKEN = t;
   localStorage.setItem('vt_token', t);
   document.getElementById('auth-modal').classList.add('hidden');
-  refreshHealth();
-}
-document.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('auth-input').addEventListener('keydown', e => {
-    if (e.key === 'Enter') submitAuth();
-  });
-});
-
-function toggleCard(id) {
-  const el = document.getElementById(id);
-  el.style.display = el.style.display === 'none' ? '' : 'none';
+  init();
 }
 
-// 持久化用户偏好（只剩 lang + polish toggle）
+// ─── Sidebar (drawer for mobile) ───────────────────────
+function toggleSidebar() {
+  const sb = document.getElementById('sidebar');
+  const bd = document.getElementById('backdrop');
+  sb.classList.toggle('open');
+  bd.classList.toggle('show', sb.classList.contains('open'));
+}
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('backdrop').classList.remove('show');
+}
+
+// ─── Config persistence (lang + polish) ─────────────────
 function loadConfig() {
   const cfg = JSON.parse(localStorage.getItem('vt_cfg') || '{}');
   document.getElementById('do-polish').checked = cfg.do_polish !== false;
@@ -354,156 +627,187 @@ function saveConfig() {
     lang: document.getElementById('lang').value,
   }));
 }
-['do-polish','lang'].forEach(id =>
-  document.addEventListener('DOMContentLoaded', () =>
-    document.getElementById(id).addEventListener('change', saveConfig)));
 
+// ─── Health ─────────────────────────────────────────────
 async function refreshHealth() {
   const pill = document.getElementById('status-pill');
   try {
     const h = await api('GET', '/api/health');
     pill.className = 'status-pill ok';
     const llmTag = h.llm_configured ? `llm:${h.llm_model}` : 'llm:✗';
-    pill.textContent = `groq:${h.groq_keys} ${llmTag} jobs:${h.jobs_in_memory}`;
+    pill.textContent = `groq:${h.groq_keys} · ${llmTag}`;
   } catch (e) {
     pill.className = 'status-pill err';
     pill.textContent = e.message.substring(0, 30);
   }
 }
 
-async function startTranscribe() {
-  const urlsRaw = document.getElementById('urls').value;
-  const urls = urlsRaw.split('\n').map(x => x.trim()).filter(Boolean);
-  if (!urls.length) { toast('先粘 URL'); return; }
-  saveConfig();
-  const body = {
-    urls, lang: document.getElementById('lang').value,
-    do_polish: document.getElementById('do-polish').checked,
-  };
-  const btn = document.getElementById('submit-btn');
-  btn.disabled = true; btn.textContent = '提交中...';
+// ─── History list ──────────────────────────────────────
+async function refreshHistory() {
   try {
-    const res = await api('POST', '/api/transcribe', body);
-    toast(`已提交 ${res.count} 条`);
-    document.getElementById('urls').value = '';
-    pollJob(res.job_id);
-  } catch (e) {
-    toast(`失败: ${e.message}`, 4000);
-  } finally {
-    btn.disabled = false; btn.textContent = '开始转录';
-  }
-}
-
-function pollJob(jobId) {
-  const tick = async () => {
-    try {
-      const job = await api('GET', `/api/jobs/${jobId}`);
-      renderJob(job);
-      if (job.status === 'done') {
-        clearInterval(handle);
-        activeJobs.delete(jobId);
-        refreshHealth();
+    const jobs = await api('GET', '/api/jobs');
+    renderHistory(jobs);
+    // 同时检查 active job 状态
+    if (ACTIVE_JOB_ID) {
+      const j = jobs.find(x => x.id === ACTIVE_JOB_ID);
+      if (j) renderBottom(j);
+      if (j && j.status === 'done') {
+        // 完成后停止轮询
+        ACTIVE_JOB_ID = null;
       }
-    } catch (e) {
-      console.error(e);
     }
-  };
-  const handle = setInterval(tick, POLL_INTERVAL);
-  activeJobs.set(jobId, { handle });
-  tick();
+  } catch (e) { /* silent */ }
 }
 
-function renderJob(job) {
-  let el = document.getElementById('job-' + job.id);
-  if (!el) {
-    el = document.createElement('div');
-    el.id = 'job-' + job.id;
-    el.className = 'card';
-    document.getElementById('jobs').prepend(el);
+function jobOverallStatus(items) {
+  if (items.some(i => i.status === 'running' || i.status === 'pending')) return 'running';
+  if (items.some(i => i.status === 'failed')) {
+    return items.some(i => i.status === 'done') ? 'partial' : 'failed';
   }
-  const ts = new Date(job.created_at * 1000).toLocaleTimeString();
-  const doneCount = job.items.filter(i => i.status === 'done').length;
-  const failCount = job.items.filter(i => i.status === 'failed').length;
-  const total = job.items.length;
-  el.innerHTML = `
-    <div class="card-header">
-      <div class="card-title">Job <span style="font-family: var(--font-mono); text-transform: none;">${job.id}</span> · ${ts}</div>
-      <div style="display:flex; align-items:center; gap:10px;">
-        <span class="elapsed">${doneCount}/${total} done · ${failCount} fail</span>
-        <button class="btn btn-secondary btn-small" onclick="deleteJob('${job.id}')">×</button>
-      </div>
-    </div>
-    <div>${job.items.map(it => renderItem(job.id, it)).join('')}</div>
-  `;
+  return 'done';
 }
 
-function renderItem(jobId, it) {
+function jobLabel(j) {
+  const titles = j.items.map(i => i.title || i.url).filter(Boolean);
+  if (titles.length === 0) return '(no items)';
+  if (titles.length === 1) return titles[0];
+  return `${titles[0]} +${titles.length - 1}`;
+}
+
+function renderHistory(jobs) {
+  const el = document.getElementById('sidebar-list');
+  if (!jobs.length) {
+    el.innerHTML = '<div class="sidebar-empty">还没记录</div>';
+    return;
+  }
+  el.innerHTML = jobs.map(j => {
+    const status = jobOverallStatus(j.items);
+    const sel = j.id === SELECTED_JOB_ID ? 'selected' : '';
+    const doneN = j.items.filter(i => i.status === 'done').length;
+    const total = j.items.length;
+    return `
+      <div class="history-item ${sel}" onclick="selectJob('${j.id}')">
+        <div class="history-item-top">
+          <span class="dot ${status}"></span>
+          <span>${j.id.substring(0, 8)}</span>
+          <span style="margin-left:auto;">${timeAgo(j.created_at)}</span>
+        </div>
+        <div class="history-item-title">${escapeHTML(jobLabel(j))}</div>
+        <div class="history-item-meta">
+          <span>${doneN}/${total}</span>
+          <span>·</span>
+          <span>${status}</span>
+        </div>
+        <span class="history-item-delete" onclick="event.stopPropagation(); deleteJob('${j.id}')">×</span>
+      </div>
+    `;
+  }).join('');
+}
+
+async function selectJob(jobId) {
+  SELECTED_JOB_ID = jobId;
+  closeSidebar();
+  try {
+    const job = await api('GET', `/api/jobs/${jobId}`);
+    renderMain(job);
+    refreshHistory();
+  } catch (e) {
+    toast('加载失败: ' + e.message, 3000);
+  }
+}
+
+// ─── Main (transcript display) ─────────────────────────
+let mainItemTab = {};  // itemKey -> 'polished' | 'raw' | 'log'
+
+function renderMain(job) {
+  const el = document.getElementById('main-content');
+  if (!job.items.length) {
+    el.innerHTML = '<div class="empty-state"><div>(empty)</div></div>';
+    return;
+  }
+  // 多个 item 时分别渲染
+  el.innerHTML = job.items.map((it, i) => renderItemFull(job.id, it)).join('<hr style="border:none;border-top:1px solid var(--border); margin: 24px 0;">');
+  // 自动给所有 item 渲染时附上 tab 状态
+}
+
+function renderItemFull(jobId, it) {
+  const key = `${jobId}-${it.idx}`;
+  const tab = mainItemTab[key] || (it.polished && it.polished !== it.raw ? 'polished' : 'raw');
   const elapsed = it.elapsed ? `${it.elapsed.toFixed(1)}s` : '';
-  const titleOrUrl = it.title || it.url;
-  const subUrl = it.title ? `<div class="item-url">${escapeHTML(it.url)}</div>` : '';
-  const bodyKey = `body-${jobId}-${it.idx}`;
-  const openClass = it.status === 'done' || it.status === 'failed' ? 'open' : '';
-  let body = '';
-  if (it.status === 'done') {
-    body = `
+  const titleStr = it.title || `视频 #${it.idx + 1}`;
+
+  if (it.status === 'pending' || it.status === 'running') {
+    return `
+      <div>
+        <div class="result-header">
+          <div class="result-title-area">
+            <div class="result-title">${escapeHTML(titleStr)}</div>
+            <div class="result-url"><a href="${escapeHTML(it.url)}" target="_blank">${escapeHTML(it.url)}</a></div>
+          </div>
+          <span class="status-pill" style="color: var(--accent); border-color: rgba(245,158,11,0.3);">${it.status}</span>
+        </div>
+        <div class="log-block" style="min-height: 120px;">${(it.logs || []).slice(-15).map(l => `<div class="log-line">${escapeHTML(l)}</div>`).join('') || '<div style="color:var(--text-faint);">等待...</div>'}</div>
+      </div>
+    `;
+  }
+
+  if (it.status === 'failed') {
+    return `
+      <div>
+        <div class="result-header">
+          <div class="result-title-area">
+            <div class="result-title">${escapeHTML(titleStr)}</div>
+            <div class="result-url"><a href="${escapeHTML(it.url)}" target="_blank">${escapeHTML(it.url)}</a></div>
+          </div>
+          <span class="status-pill" style="color: var(--error); border-color: rgba(244,63,94,0.3);">failed</span>
+        </div>
+        <div class="error-msg">${escapeHTML(it.error || 'unknown error')}</div>
+        ${it.logs && it.logs.length ? `<div class="log-block">${it.logs.slice(-20).map(l => `<div class="log-line">${escapeHTML(l)}</div>`).join('')}</div>` : ''}
+      </div>
+    `;
+  }
+
+  // done
+  const hasPolished = it.polished && it.polished !== it.raw;
+  return `
+    <div>
+      <div class="result-header">
+        <div class="result-title-area">
+          <div class="result-title">${escapeHTML(titleStr)}</div>
+          <div class="result-url"><a href="${escapeHTML(it.url)}" target="_blank">${escapeHTML(it.url)}</a></div>
+        </div>
+        <span class="elapsed status-pill" style="color: var(--success); border-color: rgba(16,185,129,0.3);">${elapsed}</span>
+      </div>
       <div class="tabs">
-        <div class="tab ${it.polished && it.polished !== it.raw ? 'active' : ''}" onclick="switchTab(this, '${bodyKey}-polished')">校对后</div>
-        <div class="tab ${!(it.polished && it.polished !== it.raw) ? 'active' : ''}" onclick="switchTab(this, '${bodyKey}-raw')">原始</div>
-        <div class="tab" onclick="switchTab(this, '${bodyKey}-log')">日志</div>
+        ${hasPolished ? `<div class="tab ${tab==='polished'?'active':''}" onclick="switchMainTab('${key}','polished',this)">校对后</div>` : ''}
+        <div class="tab ${tab==='raw'?'active':''}" onclick="switchMainTab('${key}','raw',this)">原始</div>
+        <div class="tab ${tab==='log'?'active':''}" onclick="switchMainTab('${key}','log',this)">日志</div>
       </div>
       <div class="tab-content">
-        <div id="${bodyKey}-polished" class="tab-pane ${it.polished && it.polished !== it.raw ? 'active' : ''}">
-          <div class="copy-row"><span class="small-label">${(it.polished || '').length} chars</span><button class="btn btn-secondary btn-small" onclick="copyText(this, ${JSON.stringify(it.polished || '').replace(/'/g, '&apos;')})">复制</button></div>
+        ${hasPolished ? `
+        <div class="tab-pane ${tab==='polished'?'active':''}" data-pane="polished">
+          <div class="tab-toolbar"><span class="meta">${(it.polished || '').length} chars</span><button class="btn btn-secondary btn-small" onclick="copyText(this, ${JSON.stringify(it.polished || '')})">复制</button></div>
           <div class="text-block">${escapeHTML(it.polished || '')}</div>
-        </div>
-        <div id="${bodyKey}-raw" class="tab-pane ${!(it.polished && it.polished !== it.raw) ? 'active' : ''}">
-          <div class="copy-row"><span class="small-label">${(it.raw || '').length} chars</span><button class="btn btn-secondary btn-small" onclick="copyText(this, ${JSON.stringify(it.raw || '').replace(/'/g, '&apos;')})">复制</button></div>
+        </div>` : ''}
+        <div class="tab-pane ${tab==='raw'?'active':''}" data-pane="raw">
+          <div class="tab-toolbar"><span class="meta">${(it.raw || '').length} chars</span><button class="btn btn-secondary btn-small" onclick="copyText(this, ${JSON.stringify(it.raw || '')})">复制</button></div>
           <div class="text-block">${escapeHTML(it.raw || '')}</div>
         </div>
-        <div id="${bodyKey}-log" class="tab-pane">
+        <div class="tab-pane ${tab==='log'?'active':''}" data-pane="log">
           <div class="log-block">${(it.logs || []).map(l => `<div class="log-line">${escapeHTML(l)}</div>`).join('')}</div>
         </div>
       </div>
-    `;
-  } else if (it.status === 'failed') {
-    body = `
-      <div class="tab-content">
-        <div class="error-msg">${escapeHTML(it.error || 'unknown error')}</div>
-        ${it.logs && it.logs.length ? `<div style="margin-top: 12px;"><div class="small-label" style="margin-bottom: 6px; font-family: var(--font-mono); font-size: 11px; color: var(--text-faint);">最后日志</div><div class="log-block">${it.logs.slice(-20).map(l => `<div class="log-line">${escapeHTML(l)}</div>`).join('')}</div></div>` : ''}
-      </div>
-    `;
-  } else if (it.status === 'running') {
-    body = `
-      <div class="tab-content">
-        <div class="log-block">${(it.logs || []).slice(-10).map(l => `<div class="log-line">${escapeHTML(l)}</div>`).join('') || '<div style="color: var(--text-faint);">starting...</div>'}</div>
-      </div>
-    `;
-  }
-  return `
-    <div class="item">
-      <div class="item-header ${body ? '' : 'no-bottom'}" onclick="this.nextElementSibling.classList.toggle('open')">
-        <div class="item-meta">
-          <span class="item-idx">#${it.idx + 1}</span>
-          <div style="min-width:0; flex:1;">
-            <div class="item-title">${escapeHTML(titleOrUrl)}</div>
-            ${subUrl}
-          </div>
-        </div>
-        <span class="elapsed">${elapsed}</span>
-        <span class="badge ${it.status}">${it.status}</span>
-      </div>
-      <div class="item-body ${openClass}">${body}</div>
     </div>
   `;
 }
 
-function switchTab(tabEl, paneId) {
-  const tabs = tabEl.parentElement.children;
+function switchMainTab(key, name, btn) {
+  mainItemTab[key] = name;
+  const tabs = btn.parentElement.children;
   for (const t of tabs) t.classList.remove('active');
-  tabEl.classList.add('active');
-  const content = tabEl.parentElement.nextElementSibling;
-  for (const p of content.children) p.classList.remove('active');
-  document.getElementById(paneId).classList.add('active');
+  btn.classList.add('active');
+  const content = btn.parentElement.nextElementSibling;
+  for (const p of content.children) p.classList.toggle('active', p.dataset.pane === name);
 }
 
 async function copyText(btn, text) {
@@ -517,25 +821,146 @@ async function copyText(btn, text) {
   }
 }
 
+// ─── Bottom (active job grid) ──────────────────────────
+function renderBottom(job) {
+  const wrap = document.getElementById('bottom');
+  const grid = document.getElementById('bottom-grid');
+  if (!job || !job.items.length) {
+    wrap.classList.add('empty');
+    grid.innerHTML = '';
+    return;
+  }
+  wrap.classList.remove('empty');
+  const doneN = job.items.filter(i => i.status === 'done').length;
+  const failN = job.items.filter(i => i.status === 'failed').length;
+  document.getElementById('bottom-stats').textContent = `${doneN}/${job.items.length} done · ${failN} fail`;
+
+  grid.innerHTML = job.items.map(it => renderJobCard(job.id, it)).join('');
+}
+
+function renderJobCard(jobId, it) {
+  const key = `${jobId}-${it.idx}`;
+  const prev = itemPrevStatus.get(key);
+  let justDone = '';
+  if (prev === 'running' && it.status === 'done') {
+    justDone = 'just-done';
+    setTimeout(() => {
+      const el = document.querySelector(`[data-key="${key}"]`);
+      if (el) el.classList.remove('just-done');
+    }, 1900);
+  }
+  itemPrevStatus.set(key, it.status);
+
+  const lastLog = (it.logs || []).slice(-1)[0] || '';
+  const titleStr = it.title || it.url;
+  return `
+    <div class="job-card ${it.status} ${justDone}" data-key="${key}" onclick="selectJob('${jobId}')">
+      <div class="job-card-top">
+        <span class="job-card-idx">#${it.idx + 1}</span>
+        <span class="job-card-status">${it.status}${it.elapsed ? ` · ${it.elapsed.toFixed(1)}s` : ''}</span>
+      </div>
+      <div class="job-card-title">${escapeHTML(titleStr)}</div>
+      <div class="job-card-log">${escapeHTML(lastLog.replace(/^\[\d+:\d+:\d+\]\s*/, ''))}</div>
+    </div>
+  `;
+}
+
+// ─── Submit transcribe ─────────────────────────────────
+async function startTranscribe() {
+  const urlsRaw = document.getElementById('urls').value;
+  const urls = urlsRaw.split('\n').map(x => x.trim()).filter(Boolean);
+  if (!urls.length) { toast('先粘 URL'); return; }
+  if (urls.length > 12) { toast(`最多 12 路，当前 ${urls.length}`); return; }
+  saveConfig();
+  const body = {
+    urls, lang: document.getElementById('lang').value,
+    do_polish: document.getElementById('do-polish').checked,
+  };
+  const btn = document.getElementById('submit-btn');
+  btn.disabled = true; btn.textContent = '提交中';
+  try {
+    const res = await api('POST', '/api/transcribe', body);
+    toast(`已提交 ${res.count} 条`);
+    document.getElementById('urls').value = '';
+    ACTIVE_JOB_ID = res.job_id;
+    SELECTED_JOB_ID = res.job_id;
+    await refreshHistory();
+    await selectJob(res.job_id);
+  } catch (e) {
+    toast(`失败: ${e.message}`, 4000);
+  } finally {
+    btn.disabled = false; btn.textContent = '转录';
+  }
+}
+
+// ─── Delete ────────────────────────────────────────────
 async function deleteJob(jobId) {
-  if (!confirm('删除这个任务记录？')) return;
-  await api('DELETE', `/api/jobs/${jobId}`);
-  const el = document.getElementById('job-' + jobId);
-  if (el) el.remove();
-  const ah = activeJobs.get(jobId);
-  if (ah) { clearInterval(ah.handle); activeJobs.delete(jobId); }
+  if (!confirm('删除这条记录？')) return;
+  try {
+    await api('DELETE', `/api/jobs/${jobId}`);
+    if (SELECTED_JOB_ID === jobId) {
+      SELECTED_JOB_ID = null;
+      document.getElementById('main-content').innerHTML = '<div class="empty-state"><div class="empty-state-emoji">🎬</div><div>从左侧选一条历史，或粘 URL 提交新任务</div></div>';
+    }
+    if (ACTIVE_JOB_ID === jobId) ACTIVE_JOB_ID = null;
+    refreshHistory();
+  } catch (e) {
+    toast('删除失败: ' + e.message);
+  }
 }
 
-function escapeHTML(s) {
-  return String(s)
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+async function deleteAllJobs() {
+  if (!confirm('清空所有历史？此操作不可恢复')) return;
+  try {
+    const r = await api('DELETE', '/api/jobs');
+    toast(`已删 ${r.deleted} 条`);
+    SELECTED_JOB_ID = null;
+    ACTIVE_JOB_ID = null;
+    document.getElementById('main-content').innerHTML = '<div class="empty-state"><div class="empty-state-emoji">🎬</div><div>历史已清空</div></div>';
+    renderBottom(null);
+    refreshHistory();
+  } catch (e) {
+    toast('清空失败: ' + e.message);
+  }
 }
 
-// 启动
-document.addEventListener('DOMContentLoaded', () => {
+// ─── Polling ───────────────────────────────────────────
+async function tick() {
+  await refreshHistory();
+  // 如果选中的 job 还在跑 / 是 active，刷新主区
+  if (SELECTED_JOB_ID) {
+    try {
+      const job = await api('GET', `/api/jobs/${SELECTED_JOB_ID}`);
+      if (job.status === 'running' || SELECTED_JOB_ID === ACTIVE_JOB_ID) {
+        renderMain(job);
+      }
+    } catch (e) {}
+  }
+}
+
+// ─── Init ──────────────────────────────────────────────
+async function init() {
   loadConfig();
-  refreshHealth();
+  await refreshHealth();
+  await refreshHistory();
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(tick, POLL_INTERVAL);
+  if (healthTimer) clearInterval(healthTimer);
+  healthTimer = setInterval(refreshHealth, 30000);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  ['do-polish','lang'].forEach(id =>
+    document.getElementById(id).addEventListener('change', saveConfig));
+  document.getElementById('auth-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') submitAuth();
+  });
+  // textarea Ctrl+Enter 提交
+  document.getElementById('urls').addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') startTranscribe();
+  });
+  // 启动
+  init();
 });
 </script>
 </body>
