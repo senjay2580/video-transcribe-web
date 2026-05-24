@@ -870,11 +870,11 @@ function renderItemFull(jobId, it) {
       <div class="tab-content">
         ${hasPolished ? `
         <div class="tab-pane ${tab==='polished'?'active':''}" data-pane="polished">
-          <div class="tab-toolbar"><span class="meta">${(it.polished || '').length} chars</span><button class="btn btn-secondary btn-small" onclick="copyText(this, ${JSON.stringify(it.polished || '')})">复制</button></div>
+          <div class="tab-toolbar"><span class="meta">${(it.polished || '').length} chars</span><button class="btn btn-secondary btn-small" onclick="copyFromBlock(this)">复制</button></div>
           <div class="text-block">${escapeHTML(it.polished || '')}</div>
         </div>` : ''}
         <div class="tab-pane ${tab==='raw'?'active':''}" data-pane="raw">
-          <div class="tab-toolbar"><span class="meta">${(it.raw || '').length} chars</span><button class="btn btn-secondary btn-small" onclick="copyText(this, ${JSON.stringify(it.raw || '')})">复制</button></div>
+          <div class="tab-toolbar"><span class="meta">${(it.raw || '').length} chars</span><button class="btn btn-secondary btn-small" onclick="copyFromBlock(this)">复制</button></div>
           <div class="text-block">${escapeHTML(it.raw || '')}</div>
         </div>
         <div class="tab-pane ${tab==='log'?'active':''}" data-pane="log">
@@ -959,6 +959,14 @@ async function deleteCookies(platform) {
   } catch (e) {
     toast('删除失败: ' + e.message);
   }
+}
+
+// 从按钮所在 tab-pane 的 .text-block 里取文本复制（避免 HTML attribute 引号转义 bug）
+function copyFromBlock(btn) {
+  const pane = btn.closest('.tab-pane');
+  const block = pane ? pane.querySelector('.text-block') : null;
+  if (!block) { toast('找不到内容'); return; }
+  copyText(btn, block.textContent);
 }
 
 async function copyText(btn, text) {
