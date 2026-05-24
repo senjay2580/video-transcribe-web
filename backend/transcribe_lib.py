@@ -58,18 +58,25 @@ def download(url: str, tmp_dir: str, log: Callable[[str], None]) -> tuple[str, s
     is_bilibili = "bilibili" in url or "b23.tv" in url
     referer = "https://www.bilibili.com" if is_bilibili else url
 
-    # 按平台挑 cookies 文件（环境变量配置，文件存在才用）
+    # 按平台挑 cookies 文件：优先 COOKIES_DIR/<platform>.txt（UI 上传），再 fallback 到环境变量
     cookies_file = None
+    cookies_dir = os.environ.get("COOKIES_DIR")
+    def _pick(platform: str, env_name: str):
+        if cookies_dir:
+            f = os.path.join(cookies_dir, f"{platform}.txt")
+            if os.path.isfile(f):
+                return f
+        v = os.environ.get(env_name)
+        if v and os.path.isfile(v):
+            return v
+        return None
+
     if is_bilibili:
-        bc = os.environ.get("BILIBILI_COOKIES")
-        if bc and os.path.isfile(bc):
-            cookies_file = bc
-            log(f"using bilibili cookies: {os.path.basename(bc)}")
+        cookies_file = _pick("bilibili", "BILIBILI_COOKIES")
     elif "youtube" in url or "youtu.be" in url:
-        yc = os.environ.get("YOUTUBE_COOKIES")
-        if yc and os.path.isfile(yc):
-            cookies_file = yc
-            log(f"using youtube cookies: {os.path.basename(yc)}")
+        cookies_file = _pick("youtube", "YOUTUBE_COOKIES")
+    if cookies_file:
+        log(f"using cookies: {os.path.basename(cookies_file)}")
 
     base_args = [
         "--no-playlist", "-o", out_tpl,

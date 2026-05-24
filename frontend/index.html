@@ -401,6 +401,39 @@
   .modal input:focus { outline: none; border-color: var(--accent); }
   .hidden { display: none !important; }
 
+  /* ── Cookie Panel ─────────────────────────── */
+  .cookie-row {
+    background: var(--bg-elev); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 14px;
+    margin-bottom: 10px;
+  }
+  .cookie-row-head {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 10px;
+  }
+  .cookie-row-title { font-size: 14px; font-weight: 600; }
+  .cookie-row-status {
+    font-size: 11px; font-family: var(--font-mono);
+    color: var(--text-faint); padding: 2px 8px; border-radius: 999px;
+    border: 1px solid var(--border);
+  }
+  .cookie-row-status.has { color: var(--success); border-color: rgba(16,185,129,0.3); }
+  .cookie-row-controls {
+    display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  }
+  .cookie-row input[type=file] {
+    flex: 1; min-width: 0; background: var(--bg);
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 6px 8px; color: var(--text); font-size: 12px;
+    font-family: var(--font-mono);
+  }
+  .cookie-row input[type=file]::file-selector-button {
+    background: var(--bg-card); color: var(--text);
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 4px 10px; margin-right: 8px; cursor: pointer;
+    font-family: var(--font-sans); font-size: 12px;
+  }
+
   /* ── Toast ─────────────────────────── */
   .toast {
     position: fixed; bottom: calc(var(--bottom-h) + 24px); right: 24px;
@@ -474,6 +507,26 @@
   </div>
 </div>
 
+<!-- Cookies Modal -->
+<div id="cookies-modal" class="modal-bg hidden" onclick="if(event.target===this) closeCookiesModal()">
+  <div class="modal" style="width: 520px; max-height: 90vh; overflow-y: auto;">
+    <h2>🍪 Cookies 管理</h2>
+    <p style="color: var(--text-muted); margin-bottom: 16px; font-size: 13px; line-height: 1.6;">
+      VPS 数据中心 IP 被 B 站等平台风控，需要带浏览器 cookies 绕过。<br>
+      <strong style="color: var(--text);">导出方法</strong>：装 Chrome 扩展
+      <a href="https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc" target="_blank">Get cookies.txt LOCALLY</a>
+      → 访问对应站点 → 点扩展 Export → 上传文件。
+    </p>
+
+    <div class="cookie-row" id="cookie-row-bilibili"></div>
+    <div class="cookie-row" id="cookie-row-youtube"></div>
+
+    <div style="display:flex; justify-content:flex-end; margin-top: 20px; gap: 8px;">
+      <button class="btn btn-secondary" onclick="closeCookiesModal()">关闭</button>
+    </div>
+  </div>
+</div>
+
 <div id="backdrop" class="backdrop" onclick="closeSidebar()"></div>
 
 <div class="app">
@@ -511,6 +564,7 @@
           <option value="en">English</option>
           <option value="ja">日本語</option>
         </select>
+        <button class="btn btn-secondary btn-small" onclick="openCookiesModal()" title="上传 cookies 绕反爬">🍪</button>
         <button class="btn" id="submit-btn" onclick="startTranscribe()">转录</button>
       </div>
     </div>
@@ -808,6 +862,84 @@ function switchMainTab(key, name, btn) {
   btn.classList.add('active');
   const content = btn.parentElement.nextElementSibling;
   for (const p of content.children) p.classList.toggle('active', p.dataset.pane === name);
+}
+
+// ─── Cookies modal ─────────────────────────────────────
+const PLATFORM_LABEL = {
+  bilibili: { name: 'Bilibili', site: 'https://www.bilibili.com' },
+  youtube: { name: 'YouTube', site: 'https://www.youtube.com' },
+};
+
+function openCookiesModal() {
+  document.getElementById('cookies-modal').classList.remove('hidden');
+  refreshCookiesStatus();
+}
+
+function closeCookiesModal() {
+  document.getElementById('cookies-modal').classList.add('hidden');
+}
+
+async function refreshCookiesStatus() {
+  try {
+    const status = await api('GET', '/api/cookies');
+    for (const p of Object.keys(PLATFORM_LABEL)) {
+      const info = status[p] || { exists: false };
+      const row = document.getElementById(`cookie-row-${p}`);
+      const meta = PLATFORM_LABEL[p];
+      const statusHtml = info.exists
+        ? `<span class="cookie-row-status has">已上传 · ${info.size}B · ${timeAgo(info.mtime)}前</span>`
+        : `<span class="cookie-row-status">未上传</span>`;
+      row.innerHTML = `
+        <div class="cookie-row-head">
+          <div class="cookie-row-title">${meta.name}</div>
+          ${statusHtml}
+        </div>
+        <div class="cookie-row-controls">
+          <input type="file" id="cookies-file-${p}" accept=".txt" />
+          <button class="btn btn-small" onclick="uploadCookies('${p}')">上传</button>
+          ${info.exists ? `<button class="btn btn-secondary btn-small" onclick="deleteCookies('${p}')">删除</button>` : ''}
+        </div>
+        <div style="font-size: 11px; color: var(--text-faint); margin-top: 8px; font-family: var(--font-mono);">
+          访问 <a href="${meta.site}" target="_blank">${meta.site}</a> → Get cookies.txt LOCALLY → Export
+        </div>
+      `;
+    }
+  } catch (e) {
+    toast('加载失败: ' + e.message);
+  }
+}
+
+async function uploadCookies(platform) {
+  const fileEl = document.getElementById(`cookies-file-${platform}`);
+  if (!fileEl.files.length) { toast('先选文件'); return; }
+  const fd = new FormData();
+  fd.append('file', fileEl.files[0]);
+  try {
+    const r = await fetch(API + `/api/cookies/${platform}`, {
+      method: 'POST', body: fd,
+      headers: AUTH_TOKEN ? { 'X-Auth-Token': AUTH_TOKEN } : {},
+    });
+    if (!r.ok) {
+      const t = await r.text();
+      throw new Error(`${r.status}: ${t}`);
+    }
+    toast(`${platform} cookies 已上传`);
+    fileEl.value = '';
+    await refreshCookiesStatus();
+  } catch (e) {
+    toast('上传失败: ' + e.message, 4000);
+  }
+}
+
+async function deleteCookies(platform) {
+  if (!confirm(`删除 ${platform} cookies？`)) return;
+  try {
+    await api('DELETE', `/api/cookies/${platform}`);
+    toast(`${platform} cookies 已删除`);
+    await refreshCookiesStatus();
+  } catch (e) {
+    toast('删除失败: ' + e.message);
+  }
 }
 
 async function copyText(btn, text) {

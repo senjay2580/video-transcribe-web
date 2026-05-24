@@ -9,7 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, File, Header, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -23,9 +23,12 @@ LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "https://api.deepseek.com/v1").str
 LLM_API_KEY = os.environ.get("LLM_API_KEY", "").strip()
 LLM_MODEL = os.environ.get("LLM_MODEL", "deepseek-chat").strip()
 JOBS_DIR = Path(os.environ.get("JOBS_DIR", "data/jobs")).resolve()
+COOKIES_DIR = Path(os.environ.get("COOKIES_DIR", "data/cookies")).resolve()
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 
 JOBS_DIR.mkdir(parents=True, exist_ok=True)
+COOKIES_DIR.mkdir(parents=True, exist_ok=True)
+os.environ["COOKIES_DIR"] = str(COOKIES_DIR)  # 给 transcribe_lib 用
 
 if not GROQ_API_KEYS or all(k.startswith("PLACEHOLDER") for k in GROQ_API_KEYS):
     print("[WARN] GROQ_API_KEYS 未设置或是占位符，转录会失败")
@@ -224,6 +227,55 @@ def health():
         "llm_model": LLM_MODEL,
         "jobs_in_memory": len(JOBS),
     }
+
+
+# ─── Cookies 上传 / 管理 ──────────────────────────────────────────────
+
+ALLOWED_COOKIE_PLATFORMS = {"bilibili", "youtube"}
+
+
+@app.get("/api/cookies")
+def cookies_status(x_auth_token: Optional[str] = Header(None)):
+    check_auth(x_auth_token)
+    out = {}
+    for p in ALLOWED_COOKIE_PLATFORMS:
+        f = COOKIES_DIR / f"{p}.txt"
+        if f.exists():
+            s = f.stat()
+            out[p] = {"exists": True, "size": s.st_size, "mtime": s.st_mtime}
+        else:
+            out[p] = {"exists": False}
+    return out
+
+
+@app.post("/api/cookies/{platform}")
+async def upload_cookies(platform: str, file: UploadFile = File(...),
+                         x_auth_token: Optional[str] = Header(None)):
+    check_auth(x_auth_token)
+    if platform not in ALLOWED_COOKIE_PLATFORMS:
+        raise HTTPException(400, f"platform must be one of {sorted(ALLOWED_COOKIE_PLATFORMS)}")
+    content = await file.read()
+    if len(content) == 0:
+        raise HTTPException(400, "empty file")
+    if len(content) > 1024 * 1024:
+        raise HTTPException(413, "cookies file > 1MB, too large")
+    # 简易校验：Netscape 格式应该有 \t 分隔
+    text_head = content[:2048].decode("utf-8", errors="ignore")
+    if "\t" not in text_head and "# Netscape" not in text_head:
+        raise HTTPException(400, "看起来不是 Netscape cookies.txt 格式（缺 tab 分隔符），请用「Get cookies.txt LOCALLY」类扩展导出")
+    path = COOKIES_DIR / f"{platform}.txt"
+    path.write_bytes(content)
+    path.chmod(0o600)
+    return {"ok": True, "platform": platform, "size": len(content)}
+
+
+@app.delete("/api/cookies/{platform}")
+def delete_cookies(platform: str, x_auth_token: Optional[str] = Header(None)):
+    check_auth(x_auth_token)
+    if platform not in ALLOWED_COOKIE_PLATFORMS:
+        raise HTTPException(400, "invalid platform")
+    (COOKIES_DIR / f"{platform}.txt").unlink(missing_ok=True)
+    return {"ok": True}
 
 
 # ─── 前端静态文件 ─────────────────────────────────────────────────────
