@@ -51,30 +51,51 @@ def find_yt_dlp() -> list[str]:
 
 
 def download(url: str, tmp_dir: str, log: Callable[[str], None]) -> tuple[str, str]:
-    """下载视频，返回 (file_path, title)。带浏览器 UA + Referer 绕 B站 412"""
+    """下载视频，返回 (file_path, title)。带浏览器 UA + Referer + 可选 cookies"""
     yt = find_yt_dlp()
     out_tpl = os.path.join(tmp_dir, "%(title).80s.%(ext)s")
     ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
-    # 按域名挑 Referer（B站 412 主要靠这个绕）
-    referer = "https://www.bilibili.com" if "bilibili" in url or "b23.tv" in url else url
+    is_bilibili = "bilibili" in url or "b23.tv" in url
+    referer = "https://www.bilibili.com" if is_bilibili else url
+
+    # 按平台挑 cookies 文件（环境变量配置，文件存在才用）
+    cookies_file = None
+    if is_bilibili:
+        bc = os.environ.get("BILIBILI_COOKIES")
+        if bc and os.path.isfile(bc):
+            cookies_file = bc
+            log(f"using bilibili cookies: {os.path.basename(bc)}")
+    elif "youtube" in url or "youtu.be" in url:
+        yc = os.environ.get("YOUTUBE_COOKIES")
+        if yc and os.path.isfile(yc):
+            cookies_file = yc
+            log(f"using youtube cookies: {os.path.basename(yc)}")
+
+    base_args = [
+        "--no-playlist", "-o", out_tpl,
+        "--no-warnings", "--retries", "3",
+        "--fragment-retries", "3", "--socket-timeout", "30",
+        "--user-agent", ua,
+        "--referer", referer,
+        "--add-header", "Accept-Language:zh-CN,zh;q=0.9,en;q=0.8",
+    ]
+    if cookies_file:
+        base_args += ["--cookies", cookies_file]
+
     last_err = ""
     for fmt in ("ba/b", "b"):
         log(f"yt-dlp -f {fmt} ...")
-        cmd = list(yt) + [
-            "-f", fmt, "--no-playlist", "-o", out_tpl,
-            "--no-warnings", "--retries", "3",
-            "--fragment-retries", "3", "--socket-timeout", "30",
-            "--user-agent", ua,
-            "--referer", referer,
-            "--add-header", "Accept-Language:zh-CN,zh;q=0.9,en;q=0.8",
-            url,
-        ]
+        cmd = list(yt) + ["-f", fmt] + base_args + [url]
         r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
         if r.returncode == 0:
             break
         last_err = r.stderr
     else:
-        raise TranscribeError(f"yt-dlp 全部尝试失败:\n{last_err[-500:]}")
+        # 给 B 站 412 加专门提示
+        err_tail = last_err[-500:]
+        if is_bilibili and "412" in err_tail:
+            err_tail += "\n\n[提示] B站 412 = 你 VPS 的 IP 被风控。解决：导出浏览器 B 站 cookies 上传 VPS，在 .env 设 BILIBILI_COOKIES=/path/to/cookies.txt"
+        raise TranscribeError(f"yt-dlp 全部尝试失败:\n{err_tail}")
 
     files = list(Path(tmp_dir).glob("*"))
     if not files:
