@@ -155,29 +155,36 @@ def _groq_one_call(audio_path: str, api_key: str, lang: str, model: str) -> tupl
 
 
 def transcribe_chunk(audio_path: str, api_keys: list[str], start_idx: int,
-                     lang: str, model: str, log: Callable[[str], None]) -> tuple[str, int]:
+                     lang: str, model: str, log: Callable[[str], None],
+                     max_server_retries: int = 5) -> tuple[str, int]:
     idx = start_idx
-    tried = 0
-    while tried < len(api_keys):
+    keys_rejected = 0          # 429/401/403 或网络异常：换 key 计数
+    server_retries = 0         # 5xx 服务端错误：同 key 退避重试计数
+    while keys_rejected < len(api_keys):
         key = api_keys[idx]
         try:
             status, resp = _groq_one_call(audio_path, key, lang, model)
         except Exception as e:
             log(f"Key{idx + 1} 网络异常: {e}")
             idx = (idx + 1) % len(api_keys)
-            tried += 1
+            keys_rejected += 1
             continue
         if status == 200:
             return resp.get("text", ""), idx  # type: ignore
         if status in (429, 401, 403):
             log(f"Key{idx + 1} {status} 切换")
             idx = (idx + 1) % len(api_keys)
-            tried += 1
+            keys_rejected += 1
             continue
         if 500 <= status < 600:
-            log(f"Key{idx + 1} 服务端 {status} 重试")
-            time.sleep(3)
-            tried += 1
+            # Groq 服务端错误：同 key 指数退避重试（轮换 key 无用，是 Groq 端故障）
+            if server_retries >= max_server_retries:
+                raise TranscribeError(
+                    f"Groq 服务端 {status} 连续重试 {server_retries} 次仍失败: {str(resp)[:200]}")
+            wait = min(3 * (2 ** server_retries), 60)   # 3,6,12,24,48,60...
+            server_retries += 1
+            log(f"Key{idx + 1} 服务端 {status} 重试 {server_retries}/{max_server_retries}，{wait}s 后再试: {str(resp)[:200]}")
+            time.sleep(wait)
             continue
         raise TranscribeError(f"Groq {status}: {str(resp)[:300]}")
     raise TranscribeError("所有 Groq Key 都失败")
