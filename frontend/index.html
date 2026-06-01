@@ -1059,10 +1059,16 @@ async function startTranscribe() {
     urls, lang: document.getElementById('lang').value,
     do_polish: document.getElementById('do-polish').checked,
   };
+  // 手机端某些浏览器/代理会吞掉明文 HTTP 的 POST body → 把同一份数据也塞进 URL query，
+  // 后端 body 为空时会退回读 query，双保险。
+  const qs = new URLSearchParams();
+  urls.forEach(u => qs.append('u', u));
+  qs.set('lang', body.lang);
+  qs.set('do_polish', body.do_polish ? 'true' : 'false');
   const btn = document.getElementById('submit-btn');
   btn.disabled = true; btn.textContent = '提交中';
   try {
-    const res = await api('POST', '/api/transcribe', body);
+    const res = await api('POST', '/api/transcribe?' + qs.toString(), body);
     toast(`已提交 ${res.count} 条`);
     document.getElementById('urls').value = '';
     ACTIVE_JOB_ID = res.job_id;

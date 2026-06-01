@@ -15,6 +15,8 @@ from typing import Callable, Optional
 import httpx
 
 MAX_FILE_SIZE = 24 * 1024 * 1024  # Groq 25MB 上限留 1MB 余量
+DEFAULT_SEGMENT_SECONDS = 120
+DEFAULT_GROQ_TIMEOUT_SECONDS = 120
 SUPPORTED_AUDIO_EXT = {".mp3", ".wav", ".m4a", ".flac", ".ogg", ".opus", ".webm"}
 SUPPORTED_VIDEO_EXT = {".mp4", ".mkv", ".avi", ".mov", ".flv", ".wmv", ".mpg", ".mpeg", ".ts"}
 BILIBILI_PATTERN = re.compile(r"(bilibili\.com|b23\.tv|BV[a-zA-Z0-9]+)")
@@ -24,8 +26,35 @@ class TranscribeError(Exception):
     pass
 
 
+def env_int(name: str, default: int, min_value: int, max_value: int) -> int:
+    try:
+        value = int(os.environ.get(name, default))
+    except (TypeError, ValueError):
+        return default
+    return max(min_value, min(max_value, value))
+
+
 def is_url(s: str) -> bool:
     return s.startswith(("http://", "https://")) or bool(BILIBILI_PATTERN.search(s))
+
+
+def extract_url(text: str) -> str:
+    """从手机 App 分享文本里抽出真正的视频链接。
+
+    例：'【标题】 https://b23.tv/2zvrRm7 复制此链接，打开手机Bilibili查看'
+        -> 'https://b23.tv/2zvrRm7'
+    抽不到链接就原样返回（可能是本地文件路径）。
+    """
+    s = text.strip()
+    # 1) 第一个 http(s) 链接：遇空白 / 中文 / 常见全角标点即停
+    m = re.search(r"https?://[^\s一-鿿，。、！？；：【】（）“”‘’]+", s)
+    if m:
+        return m.group(0).rstrip("/.,;)]>，。、")
+    # 2) 裸 BV 号（B站 App 偶尔只给号）
+    m = re.search(r"BV[a-zA-Z0-9]{8,}", s)
+    if m:
+        return f"https://www.bilibili.com/video/{m.group(0)}"
+    return s
 
 
 def find_ffmpeg() -> str:
@@ -128,10 +157,13 @@ def extract_audio(video_path: str, tmp_dir: str, log: Callable[[str], None]) -> 
 def split_audio(audio: str, tmp_dir: str, log: Callable[[str], None]) -> list[str]:
     if os.path.getsize(audio) <= MAX_FILE_SIZE:
         return [audio]
-    log(f"超过 24MB，按 600s 分段")
+    segment_seconds = env_int("GROQ_SEGMENT_SECONDS", DEFAULT_SEGMENT_SECONDS, 60, 600)
+    log(f"超过 24MB，按 {segment_seconds}s 分段")
     pattern = os.path.join(tmp_dir, "chunk_%03d.wav")
     cmd = [find_ffmpeg(), "-i", audio, "-f", "segment",
-           "-segment_time", "600", "-c", "copy", "-y", pattern]
+           "-segment_time", str(segment_seconds), "-reset_timestamps", "1",
+           "-vn", "-ar", "16000", "-ac", "1", "-acodec", "pcm_s16le",
+           "-y", pattern]
     r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if r.returncode != 0:
         raise TranscribeError(f"分段失败:\n{r.stderr[-500:]}")
@@ -143,11 +175,12 @@ def split_audio(audio: str, tmp_dir: str, log: Callable[[str], None]) -> list[st
 def _groq_one_call(audio_path: str, api_key: str, lang: str, model: str) -> tuple[int, dict | str]:
     url = "https://api.groq.com/openai/v1/audio/transcriptions"
     headers = {"Authorization": f"Bearer {api_key}"}
+    timeout = env_int("GROQ_TIMEOUT_SECONDS", DEFAULT_GROQ_TIMEOUT_SECONDS, 30, 300)
     with open(audio_path, "rb") as f:
         files = {"file": (os.path.basename(audio_path), f, "audio/wav")}
-        data = {"model": model, "response_format": "verbose_json",
+        data = {"model": model, "response_format": "json",
                 "language": lang, "temperature": "0"}
-        with httpx.Client(timeout=300.0) as c:
+        with httpx.Client(timeout=float(timeout)) as c:
             r = c.post(url, headers=headers, files=files, data=data)
     if r.status_code == 200:
         return 200, r.json()
@@ -159,7 +192,7 @@ def transcribe_chunk(audio_path: str, api_keys: list[str], start_idx: int,
                      max_server_retries: int = 5) -> tuple[str, int]:
     idx = start_idx
     keys_rejected = 0          # 429/401/403 或网络异常：换 key 计数
-    server_retries = 0         # 5xx 服务端错误：同 key 退避重试计数
+    server_retries = 0         # 5xx 服务端错误：退避重试计数
     while keys_rejected < len(api_keys):
         key = api_keys[idx]
         try:
@@ -177,13 +210,17 @@ def transcribe_chunk(audio_path: str, api_keys: list[str], start_idx: int,
             keys_rejected += 1
             continue
         if 500 <= status < 600:
-            # Groq 服务端错误：同 key 指数退避重试（轮换 key 无用，是 Groq 端故障）
             if server_retries >= max_server_retries:
                 raise TranscribeError(
                     f"Groq 服务端 {status} 连续重试 {server_retries} 次仍失败: {str(resp)[:200]}")
             wait = min(3 * (2 ** server_retries), 60)   # 3,6,12,24,48,60...
             server_retries += 1
-            log(f"Key{idx + 1} 服务端 {status} 重试 {server_retries}/{max_server_retries}，{wait}s 后再试: {str(resp)[:200]}")
+            next_idx = (idx + 1) % len(api_keys)
+            log(
+                f"Key{idx + 1} 服务端 {status} 重试 {server_retries}/{max_server_retries}，"
+                f"{wait}s 后切 Key{next_idx + 1}: {str(resp)[:200]}"
+            )
+            idx = next_idx
             time.sleep(wait)
             continue
         raise TranscribeError(f"Groq {status}: {str(resp)[:300]}")
@@ -257,12 +294,15 @@ def transcribe_one(
 ) -> dict:
     """处理一个 URL/文件，返回 {title, raw, polished}"""
     with tempfile.TemporaryDirectory(prefix="vt_") as td:
-        if is_url(input_str):
-            media, title = download(input_str, td, log)
-        else:
-            if not os.path.isfile(input_str):
-                raise TranscribeError(f"文件不存在: {input_str}")
+        if os.path.isfile(input_str):
             media, title = input_str, Path(input_str).stem[:80]
+        else:
+            url = extract_url(input_str)
+            if not (url.startswith(("http://", "https://")) or BILIBILI_PATTERN.search(url)):
+                raise TranscribeError(f"既不是文件也不是可识别的链接: {input_str[:120]}")
+            if url != input_str.strip():
+                log(f"从分享文本提取链接: {url}")
+            media, title = download(url, td, log)
         ext = Path(media).suffix.lower()
         audio = media if ext in SUPPORTED_AUDIO_EXT else extract_audio(media, td, log)
         chunks = split_audio(audio, td, log)

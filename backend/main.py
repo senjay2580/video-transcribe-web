@@ -9,7 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -152,9 +152,32 @@ def _job_summary(j: dict) -> dict:
 
 # ─── API ─────────────────────────────────────────────────────────────
 
+async def _parse_transcribe_body(request: Request) -> TranscribeRequest:
+    """容错解析提交参数。
+
+    手机端某些浏览器（云加速 / 省流量代理）或明文 HTTP 链路会吞掉 POST body 或改写
+    Content-Type，FastAPI 收到空 body 就报 422 (loc=["body"], input=null)。这里：
+      ① 直接读原始 body 按 JSON 解析（不依赖 Content-Type）→ 抗 Content-Type 被改写；
+      ② body 为空时退回 query 参数（前端会把同一份数据同时塞进 URL）→ 抗 body 被吞。
+    """
+    try:
+        raw = await request.body()
+        if raw:
+            return TranscribeRequest.model_validate_json(raw)
+    except Exception:
+        pass
+    qp = request.query_params
+    return TranscribeRequest(
+        urls=qp.getlist("u"),
+        lang=qp.get("lang", "zh"),
+        do_polish=str(qp.get("do_polish", "true")).lower() not in ("false", "0", ""),
+    )
+
+
 @app.post("/api/transcribe")
-def start_transcribe(req: TranscribeRequest, x_auth_token: Optional[str] = Header(None)):
+async def start_transcribe(request: Request, x_auth_token: Optional[str] = Header(None)):
     check_auth(x_auth_token)
+    req = await _parse_transcribe_body(request)
     urls = [u.strip() for u in req.urls if u.strip()]
     if not urls:
         raise HTTPException(400, "no urls")
